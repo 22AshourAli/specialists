@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="Ashour Ali">
+<link rel="icon" type="image/png" href="assets/images/logo$.png">
+<title data-i18n="docTitle">داشبورد أعمال المختصون</title>
+<link rel="stylesheet" href="assets/style.css?v=20260830022723">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 3v18h18"/><path d="M7 14l3-3 3 3 4-5"/>
+      </svg>
+    </div>
+    <div>
+      <h1 data-i18n="title">داشبورد أعمال المختصون</h1>
+      <div class="sub" data-i18n="subtitle">تحليل تفاعلي — UDS + SAP + الفواتير + الإنتاجية</div>
+      <div class="author"><svg class="bi" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg><span>Ashour Ali</span></div>
+    </div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn ghost" id="langBtn" type="button">
+      <svg class="bi" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+      <span id="langLbl">English</span>
+    </button>
+    <button class="btn ghost" id="themeBtn" type="button" title="تبديل الوضع">
+      <svg id="themeIcon" class="bi" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+      <span id="themeLbl">Light</span>
+    </button>
+    <button class="btn primary" id="updateBtn" type="button">
+      <svg class="bi" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8 8 0 1 0 4 12v3"/><path d="M20 5v6h-6"/></svg>
+      <span data-i18n="btnUpdate">تحديث البيانات</span>
+    </button>
+    <button class="btn ghost" id="dlBtn" type="button">
+      <svg class="bi" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+      <span data-i18n="btnDl">نسخة احتياطية (JSON)</span>
+    </button>
+    <input type="file" id="fileXlsx" accept=".xlsx" hidden>
+  </div>
+
+  <div class="topmeta">
+    <span class="chip"><span class="dot"></span> <span data-i18n="chpUpdated">البيانات محدّثة:</span> <b id="genAt">—</b></span>
+    <span class="chip"><span data-i18n="chpSource">المصدر:</span> <b id="srcName">—</b><span id="srcBadge"></span></span>
+    <span class="chip" id="currChip"><span data-i18n="chpCurr">العملة:</span> ر.س</span>
+  </div>
+</header>
+
+<!-- ====== الفلاتر (Slicers) ====== -->
+<section class="slicers">
+  <div class="sc">
+    <div class="lbl">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 4h18M5 9h14M7 14h10M9 19h6"/></svg>
+      <span data-i18n="slxOffice">المكتب</span>
+    </div>
+    <div class="pills" id="slicerOffice"></div>
+  </div>
+
+  <div class="sc">
+    <div class="lbl">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span data-i18n="slxYear">السنة</span>
+    </div>
+    <select class="sel" id="slicerYear"></select>
+    <div id="yearHint" class="yhint"></div>
+  </div>
+
+  <div class="sc">
+    <div class="lbl">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 10h4M8 14h8"/></svg>
+      <span data-i18n="slxRange">الفترة الزمنية</span>
+    </div>
+    <div class="pills" id="slicerRange"></div>
+  </div>
+
+  <div class="sc">
+    <div class="lbl">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l2 6 4-16 2 10h6"/></svg>
+      <span data-i18n="slxQism">القسم</span>
+    </div>
+    <div class="pills" id="slicerQism"></div>
+  </div>
+</section>
+
+<!-- ====== بطاقات المؤشرات (KPI) ====== -->
+<section class="cards" id="kpiCards"></section>
+
+<!-- ====== الرسوم البيانية ====== -->
+<section class="charts">
+
+  <div class="panel s8">
+    <h3><span class="bar"></span><span data-i18n="chTrend">الاتجاه الشهري — الإسناد / الإنتاجية / الفوترة</span></h3>
+    <div class="psub" id="subTrend"></div>
+    <div class="chart" id="chartTrend" style="height:320px"></div>
+  </div>
+
+  <div class="panel s4">
+    <h3><span class="bar"></span><span data-i18n="chDonut">حصة المكاتب من الإسناد</span></h3>
+    <div class="psub" id="subDonut"></div>
+    <div class="chart" id="chartDonut" style="height:320px"></div>
+  </div>
+
+  <div class="panel s4">
+    <h3><span class="bar"></span><span data-i18n="chOffice">الإسناد حسب المكتب (شهرياً)</span></h3>
+    <div class="psub" id="subOffice"></div>
+    <div class="chart" id="chartOffice" style="height:300px"></div>
+  </div>
+
+  <div class="panel s4">
+    <h3><span class="bar"></span><span data-i18n="chTypeSplit">الإسناد السنوي — UDS مقابل SAP</span></h3>
+    <div class="psub" data-i18n="psTypeSplit">اضغط على سنة لفلاتر الداشبورد بها</div>
+    <div class="chart" id="chartTypeSplit" style="height:300px"></div>
+  </div>
+
+  <div class="panel s4">
+    <h3><span class="bar"></span><span data-i18n="chUnbilled">أعلى مشاريع غير المفوترة</span></h3>
+    <div class="psub" data-i18n="psUnbilled">إيرادات غير مفوترة على أعلى 8 مشاريع</div>
+    <div class="chart" id="chartUnbilled" style="height:300px"></div>
+  </div>
+
+  <div class="panel s6">
+    <h3><span class="bar"></span><span data-i18n="chPaid">ما تم صرفه شهرياً (UDS / SAP)</span></h3>
+    <div class="psub" id="subPaid"></div>
+    <div class="chart" id="chartPaid" style="height:300px"></div>
+  </div>
+
+  <div class="panel s6">
+    <h3><span class="bar"></span><span data-i18n="chMap">الإسناد — الشهر × السنة</span></h3>
+    <div class="psub" id="subMap"></div>
+    <div class="chart" id="chartHeat" style="height:300px"></div>
+  </div>
+
+</section>
+
+<footer>
+  <div id="footNote"></div>
+  <div class="branding">
+    <span data-i18n="credit">صمم وطور بواسطة</span>
+    <b>عاشور علي</b>
+    <a class="ccall" id="creditCall" href="tel:0539220371" aria-label="اتصل: 0539220371">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+    </a>
+  </div>
+</footer>
+
+<div id="toastWrap" class="toastwrap"></div>
+
+<div class="floats">
+  <a class="fab wa" id="fabWa" href="https://wa.me/966539220371?text=" target="_blank" rel="noopener" aria-label="WhatsApp">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.85 9.85 0 0 0 12.04 2zm5.83 14.14c-.25.7-1.45 1.34-2 1.39-.51.05-1.16.07-1.87-.12-.43-.11-.98-.32-1.69-.63-2.98-1.29-4.92-4.29-5.07-4.49-.15-.2-1.21-1.61-1.21-3.07 0-1.46.77-2.18 1.04-2.48.27-.3.59-.37.79-.37.2 0 .39 0 .56.01.18.01.42-.07.66.5.25.59.84 2.05.91 2.2.07.15.12.32.02.52-.09.2-.14.32-.28.5-.14.17-.3.39-.42.52-.14.15-.29.3-.13.59.17.29.74 1.22 1.59 1.97 1.09.97 2.01 1.27 2.3 1.41.29.15.46.13.63-.08.17-.2.73-.85.92-1.14.2-.29.39-.24.66-.15.27.1 1.7.8 1.99.95.29.15.49.22.56.34.07.12.07.72-.17 1.42z"/></svg>
+  </a>
+</div>
+
+<script src="assets/echarts.min.js"></script>
+<script src="assets/xlsx.full.min.js"></script>
+<script src="data.js?v=20260830022723"></script>
+<script src="assets/app.js?v=20260830022723"></script>
+</body>
+</html>

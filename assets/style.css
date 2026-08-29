@@ -1,0 +1,447 @@
+/* ============ داشبورد المختصون — v2 ============ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0f1e;
+  --bg2: #0d1430;
+  --panel: rgba(255, 255, 255, 0.045);
+  --panel-bd: rgba(148, 163, 184, 0.16);
+  --txt: #e8eef8;
+  --muted: #8ba0bd;
+  --accent: #22d3ee;
+  --accent2: #6366f1;
+  --green: #34d399;
+  --red: #f87171;
+  --amber: #fbbf24;
+  --rose: #fb7185;
+  --violet: #a78bfa;
+  --blue: #60a5fa;
+  --input-bg: rgba(255, 255, 255, 0.06);
+  --shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  --r: 16px;
+  --tt: .22s cubic-bezier(.4, 0, .2, 1);
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  --bg: #eef2f9;
+  --bg2: #dfe7f4;
+  --panel: rgba(255, 255, 255, 0.82);
+  --panel-bd: rgba(100, 116, 139, 0.25);
+  --txt: #0f2440;
+  --muted: #5b6b83;
+  --accent: #0891b2;
+  --accent2: #4f46e5;
+  --green: #059669;
+  --red: #dc2626;
+  --amber: #d97706;
+  --rose: #e11d48;
+  --violet: #7c3aed;
+  --blue: #2563eb;
+  --input-bg: #ffffff;
+  --shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  color-scheme: light;
+}
+
+html { height: 100%; }
+body {
+  min-height: 100%;
+  color: var(--txt);
+  font-family: "Segoe UI", "Tahoma", "Arial", "Cairo", sans-serif;
+  background:
+    radial-gradient(1200px 600px at 90% -5%, color-mix(in srgb, var(--accent2) 16%, transparent), transparent 60%),
+    radial-gradient(900px 500px at -10% 15%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+  background-attachment: fixed;
+  padding: 18px 22px 40px;
+  transition: background 0.35s ease, color 0.2s ease;
+}
+
+html[dir="ltr"] body { font-family: "Segoe UI", "Inter", "Arial", sans-serif; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 45%, transparent); border-radius: 99px; border: 2px solid transparent; background-clip: content-box; }
+
+/* ---------- الترويسة ---------- */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo {
+  width: 46px; height: 46px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  display: grid; place-items: center;
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent2) 45%, transparent);
+  animation: float 4.5s ease-in-out infinite;
+  cursor: pointer;
+}
+.logo svg { width: 26px; height: 26px; stroke: #fff; }
+.brand h1 {
+  font-size: 21px; font-weight: 700;
+  background: linear-gradient(90deg, var(--txt), var(--accent));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.brand .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.author {
+  display: inline-flex; align-items: center; gap: 5px; margin-top: 4px;
+  color: var(--accent); font-size: 11.5px; font-weight: 700; letter-spacing: .3px;
+}
+.author .bi { width: 13px; height: 13px; opacity: .9; }
+
+/* ---------- أزرار الاتصال العائمة ---------- */
+.floats { position: fixed; inset-inline-end: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 12px; z-index: 998; }
+.fab {
+  width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center;
+  color: #fff; box-shadow: var(--shadow); transition: transform var(--tt), box-shadow var(--tt);
+  text-decoration: none; animation: float 4.5s ease-in-out infinite;
+}
+.fab:hover { transform: translateY(-3px) scale(1.06); }
+.fab svg { width: 26px; height: 26px; }
+.fab.wa { background: linear-gradient(135deg, #25d366, #128c7e); animation-delay: .6s; }
+a.fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.ctrl { display: flex; gap: 8px; flex-wrap: wrap; }
+.topmeta { margin-inline-start: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.chip {
+  background: var(--panel); border: 1px solid var(--panel-bd);
+  border-radius: 999px; padding: 6px 13px; font-size: 12px; color: var(--muted);
+  display: inline-flex; align-items: center; gap: 6px;
+  backdrop-filter: blur(6px);
+  transition: border-color var(--tt), background var(--tt);
+}
+.chip:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.chip b { color: var(--accent); font-weight: 600; direction: ltr; unicode-bidi: embed; }
+.chip .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 60%, transparent);
+  animation: pulse 2.2s ease-out infinite;
+}
+#srcBadge {
+  background: color-mix(in srgb, var(--amber) 22%, transparent);
+  color: var(--amber); border-radius: 99px; padding: 1px 8px; font-size: 10.5px;
+  font-weight: 700; display: none;
+}
+
+/* ---------- الأزرار ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--panel-bd); background: var(--panel);
+  color: var(--txt); border-radius: 12px; padding: 8px 14px;
+  font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+  transition: transform var(--tt), box-shadow var(--tt), border-color var(--tt), background var(--tt);
+  user-select: none; white-space: nowrap;
+}
+.btn:active { transform: translateY(1px) scale(.97); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.ghost:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: var(--shadow);
+}
+.btn.primary {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 85%, #fff 5%), color-mix(in srgb, var(--accent2) 85%, #fff 5%));
+  border-color: transparent; color: #fff;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent2) 40%, transparent);
+}
+.btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent2) 55%, transparent);
+}
+.bi { width: 16px; height: 16px; stroke: currentColor; flex: none; }
+
+/* ---------- لوحة الفلاتر ---------- */
+.slicers {
+  display: grid;
+  grid-template-columns: 1.6fr 1.6fr 2.2fr 1.4fr;
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--panel-bd);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow);
+  animation: fadeUp .5s ease both;
+}
+.sc { min-width: 0; }
+.sc .lbl {
+  font-size: 11.5px; color: var(--muted); margin-bottom: 8px;
+  display: flex; align-items: center; gap: 7px; font-weight: 600; letter-spacing: 0.2px;
+}
+.sc .lbl .ic { width: 16px; height: 16px; stroke: var(--accent); }
+.pills { display: flex; flex-wrap: wrap; gap: 7px; }
+.pill {
+  border: 1px solid var(--panel-bd); background: var(--input-bg);
+  color: var(--muted); border-radius: 999px; padding: 5px 13px;
+  font-size: 12.5px; cursor: pointer; user-select: none;
+  transition: transform var(--tt), box-shadow var(--tt), border-color .15s, color .15s, background .15s;
+}
+.pill:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--txt); transform: translateY(-1px); }
+.pill.on {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-color: transparent; color: #fff; font-weight: 600;
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--accent2) 40%, transparent);
+}
+.pill.on:hover { transform: translateY(-1px) scale(1.03); }
+
+/* قائمة منسدلة — إصلاح خلفية الخيارات في الداكن */
+select.sel {
+  width: 100%; appearance: none; -webkit-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  background-origin: revert;
+  background-color: var(--input-bg); color: var(--txt);
+  border: 1px solid var(--panel-bd); border-radius: 10px;
+  padding: 8px 12px; font-size: 13px; outline: none; cursor: pointer; font-family: inherit;
+  transition: border-color var(--tt), box-shadow var(--tt);
+}
+select.sel option {
+  background: var(--bg2); color: var(--txt);
+  padding: 6px 8px;
+}
+select.sel:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+
+.yhint { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+/* ---------- منزلق الفترة (بين) ---------- */
+.between { position: relative; height: 62px; padding-top: 26px; }
+.between input[type="range"] {
+  position: absolute; left: 0; width: 100%; bottom: 22px;
+  -webkit-appearance: none; appearance: none; background: transparent;
+  pointer-events: none; height: 6px;
+  direction: ltr; margin: 0;
+}
+.between input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; pointer-events: auto;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: 2.5px solid #fff;
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--accent2) 60%, transparent);
+  cursor: grab;
+  transition: transform var(--tt), box-shadow var(--tt);
+}
+.between input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.between input[type="range"]::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(.95); }
+.between input[type="range"]::-moz-range-thumb {
+  pointer-events: auto; width: 16px; height: 16px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border: 2.5px solid #fff; cursor: grab;
+}
+.track {
+  position: absolute; left: 4px; right: 4px; bottom: calc(22px + 2px);
+  height: 5px; border-radius: 99px; background: var(--panel-bd);
+}
+.fill {
+  position: absolute; height: 5px; border-radius: 99px; bottom: calc(22px + 2px);
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: left .08s linear, width .08s linear;
+}
+.ticks { position: absolute; left: 4px; right: 4px; bottom: 14px; height: 14px; pointer-events: none; }
+.ticks span {
+  position: absolute; width: 1px; height: 9px; background: var(--panel-bd);
+  transform: translateX(-5px); border-radius: 2px;
+}
+.ticks span.lbl {
+  width: auto; height: auto; transform: none; font-size: 9.5px; color: var(--muted);
+  top: -14px; background: transparent; white-space: nowrap;
+}
+html[dir="ltr"] .ticks span { transform: translateX(-1px); }
+.mrange {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; justify-content: space-between; font-size: 12px; color: var(--muted);
+}
+.mrange b { color: var(--accent); font-weight: 700; font-size: 13px; }
+
+/* ---------- بطاقات المؤشرات ---------- */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 13px; margin-bottom: 16px; }
+.card {
+  background: var(--panel); border: 1px solid var(--panel-bd); border-radius: var(--r);
+  padding: 14px 15px; position: relative; overflow: hidden;
+  backdrop-filter: blur(6px);
+  animation: fadeUp .5s ease both;
+  transition: transform var(--tt), border-color .2s, box-shadow var(--tt);
+}
+.card:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in srgb, var(--cc, var(--accent)) 45%, transparent);
+  box-shadow: var(--shadow);
+}
+.card::after {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+  background: linear-gradient(90deg, transparent, var(--cc, var(--accent)), transparent);
+  opacity: .75;
+  transition: opacity .2s;
+}
+.card:hover::after { opacity: 1; }
+.card .row { display: flex; align-items: center; gap: 10px; }
+.icn {
+  width: 38px; height: 38px; border-radius: 11px; flex: none;
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--cc) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cc) 35%, transparent);
+  transition: transform var(--tt);
+}
+.card:hover .icn { transform: scale(1.08) rotate(-4deg); }
+.icn svg { width: 20px; height: 20px; stroke: var(--cc); }
+.card .ctitle { color: var(--muted); font-size: 12px; font-weight: 600; }
+.card .cval {
+  font-size: 23px; font-weight: 800; margin-top: 6px; direction: ltr;
+  font-variant-numeric: tabular-nums; text-align: start; letter-spacing: .2px;
+}
+html[dir="rtl"] .card .cval { text-align: right; }
+.card .cval small { font-size: 12px; color: var(--muted); font-weight: 600; margin-inline-start: 3px; }
+.card .csub { color: var(--muted); font-size: 11px; margin-top: 3px; min-height: 14px; }
+.delta {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px; margin-top: 6px;
+  animation: fadeUp .4s ease both;
+}
+.delta.up { color: var(--green); background: color-mix(in srgb, var(--green) 13%, transparent); }
+.delta.down { color: var(--red); background: color-mix(in srgb, var(--red) 13%, transparent); }
+.delta.flat { color: var(--muted); background: color-mix(in srgb, var(--muted) 13%, transparent); }
+
+/* ---------- شبكة الرسوم ---------- */
+.charts { display: grid; gap: 14px; grid-template-columns: repeat(12, 1fr); }
+.panel {
+  background: var(--panel); border: 1px solid var(--panel-bd); border-radius: var(--r);
+  padding: 14px; backdrop-filter: blur(6px);
+  animation: fadeUp .55s ease both;
+  transition: border-color .2s, box-shadow var(--tt);
+}
+.panel:hover { border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+.panel h3 {
+  font-size: 13.5px; font-weight: 700; margin-bottom: 4px;
+  display: flex; align-items: center; gap: 8px;
+}
+.panel h3 .bar {
+  width: 4px; height: 16px; border-radius: 99px;
+  background: linear-gradient(var(--accent), var(--accent2));
+}
+.panel .psub { color: var(--muted); font-size: 11px; margin-bottom: 8px; min-height: 15px; }
+.chart { width: 100%; cursor: default; min-width: 0; overflow: hidden; }
+.s6 { grid-column: span 6; }
+.s4 { grid-column: span 4; }
+.s3 { grid-column: span 3; }
+.s8 { grid-column: span 8; }
+.s5 { grid-column: span 5; }
+.s7 { grid-column: span 7; }
+.s12 { grid-column: span 12; }
+
+/* ---------- تذييل ---------- */
+footer {
+  margin-top: 20px; color: var(--muted); font-size: 11.5px; text-align: center;
+  border-top: 1px solid var(--panel-bd); padding-top: 14px; line-height: 1.9;
+}
+footer .footmeta { color: var(--txt); font-weight: 600; white-space: nowrap; }
+footer .branding {
+  margin-top: 6px; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; flex-wrap: wrap; justify-content: center;
+}
+footer .branding b { color: var(--accent); font-weight: 700; }
+.ccall {
+  display: inline-grid; place-items: center; width: 26px; height: 26px;
+  border-radius: 50%; color: var(--txt); text-decoration: none;
+  background: color-mix(in srgb, var(--accent2) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent2) 40%, transparent);
+  transition: transform var(--tt), background var(--tt), color var(--tt);
+}
+.ccall svg { width: 14px; height: 14px; }
+.ccall:hover { transform: translateY(-2px) scale(1.08); background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; }
+a.ccall:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ---------- التوست ---------- */
+.toastwrap { position: fixed; bottom: 18px; inset-inline-start: 18px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  background: var(--bg2); color: var(--txt);
+  border: 1px solid var(--panel-bd); border-inline-start: 4px solid var(--accent);
+  border-radius: 12px; padding: 11px 16px; font-size: 13px; font-weight: 600;
+  box-shadow: var(--shadow); max-width: min(420px, 88vw);
+  animation: slideIn .35s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+.toast.ok { border-inline-start-color: var(--green); }
+.toast.err { border-inline-start-color: var(--red); }
+.toast.out { animation: slideOut .3s ease both; }
+
+/* ---------- الأنيميشن ---------- */
+@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 55%, transparent); }
+  70% { box-shadow: 0 0 0 9px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes slideOut { to { opacity: 0; transform: translateX(18px); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn.loading .bi { animation: spin .8s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ---------- الاستجابة (Responsive) ---------- */
+html, body { overflow-x: hidden; max-width: 100%; }
+
+@media (max-width: 1120px) {
+  .slicers { grid-template-columns: 1fr 1fr; }
+  .s6, .s4, .s3, .s8, .s5, .s7 { grid-column: span 12; }
+}
+@media (max-width: 860px) {
+  .topbar { flex-direction: column; align-items: stretch; }
+  .topmeta { margin-inline-start: 0; width: 100%; }
+  .cards { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+  .chart, .panel { min-width: 0; }
+}
+@media (max-width: 720px) {
+  body { padding: 10px 10px 34px; }
+  .logo { width: 38px; height: 38px; }
+  .brand h1 { font-size: 16px; }
+  .brand .sub { font-size: 11.5px; }
+  .ctrl { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ctrl .btn { width: 100%; justify-content: center; padding: 9px 8px; font-size: 11.5px; }
+  #updateBtn, #dlBtn { grid-column: 1 / -1; }
+  .slicers { grid-template-columns: 1fr; padding: 11px; }
+  .sc .lbl { margin-bottom: 6px; }
+  .chart { height: 265px !important; }
+  .between { height: 66px; }
+  .floats { inset-inline-end: 13px; bottom: 13px; }
+  .fab { width: 48px; height: 48px; }
+  .fab svg { width: 23px; height: 23px; }
+  .toastwrap { inset-inline-start: 12px; bottom: 12px; }
+  .toast { max-width: calc(100vw - 24px); }
+  .topmeta .chip { font-size: 11px; padding: 5px 10px; }
+  .card .cval { font-size: 20px; }
+  footer { font-size: 11px; }
+}
+@media (max-width: 480px) {
+  .cards { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .card { padding: 12px; }
+  .icn { width: 34px; height: 34px; }
+  .icn svg { width: 18px; height: 18px; }
+  .card .cval { font-size: 18px; }
+  .card .ctitle { font-size: 11px; }
+  .card .csub { font-size: 10px; }
+  .delta { font-size: 10px; padding: 1px 6px; }
+  .panel { padding: 11px; }
+  .panel h3 { font-size: 12.5px; }
+  .pills { gap: 6px; }
+  .pill { padding: 4px 11px; font-size: 12px; }
+  .sel { font-size: 12px; padding: 7px 10px; }
+}
+@media (max-width: 360px) {
+  .cards { grid-template-columns: 1fr; }
+  .brand h1 { font-size: 14.5px; }
+  .ctrl { gap: 6px; }
+  .btn { font-size: 10.5px; gap: 5px; }
+}
