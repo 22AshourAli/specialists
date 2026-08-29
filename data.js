@@ -2,7 +2,7 @@ window.DASHBOARD_DATA = {
  "meta": {
   "title": "ملخص أعمال المختصون",
   "source": "تقرير اعمال المختصون يونيو.xlsx",
-  "generated_at": "2026-08-29T23:27:23Z",
+  "generated_at": "2026-08-29T23:53:15Z",
   "years": [
    "agg",
    2023,
