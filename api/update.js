@@ -1,37 +1,49 @@
-// Vercel serverless endpoint: publishes the uploaded dashboard data to the repo
-// so every visitor sees the latest figures. Endpoint: POST /api/update with JSON
-// { pin, data } where data is the serialized DASHBOARD_DATA object.
+// Vercel serverless endpoint: publishes the uploaded dashboard data to the GitHub
+// repository, so every visitor (via api/data + the automatic Vercel redeploy) sees
+// the latest figures. Endpoint: POST /api/update with JSON { pin, data } where
+// `data` is the serialized DASHBOARD_DATA object.
 //
-// NOTE: this writes to the deployment's own file system (/var/task), which is
-// ephemeral — it surfaces the update on the active deployment instance as a
-// cache-busting live patch. Full persistence still happens by committing the
-// regenerated data.js via git (تحديث الداشبورد.bat).
+// Requires these environment variables in Vercel (set once under Project > Settings
+// > Environment Variables):
+//   - GH_PAT   : GitHub Personal Access Token (classic, scope: "repo"; or a
+//                fine-grained token with Contents:Read/Write on this repository)
+//   - GH_OWNER : repository owner (defaults to 22AshourAli)
+//   - GH_REPO  : repository name    (defaults to specialists)
+//   - GH_BRANCH: target branch      (defaults to master)
 //
-// The pin is a light anti-accidental-write gate only (it is visible in the
-// client bundle by design, so it is NOT a security control).
+// When GH_PAT is missing the endpoint answers 503 with a clear message, keeping the
+// dashboard fully functional locally.
 
-const fs = require("fs");
-const path = require("path");
+const PUBLISH_PIN = "mokh-2026!ash"; // must match PUBLISH_PIN in assets/app.js
 
-// Must match PUBLISH_PIN in assets/app.js.
-const PUBLISH_PIN = "mokh-2026!ash";
-
-// The deployment's writable root (Vercel) or the repo root in other runtimes.
-function baseDir() {
-  if (process.env.DASH_DIR) return process.env.DASH_DIR;
-  if (fs.existsSync("/vercel/path0")) return "/vercel/path0";
-  return path.join(__dirname, "..");
+function config() {
+  return {
+    token: process.env.GH_PAT || "",
+    owner: process.env.GH_OWNER || "22AshourAli",
+    repo: process.env.GH_REPO || "specialists",
+    branch: process.env.GH_BRANCH || "master",
+  };
 }
+
+const GH_HEADERS = (token) => ({
+  Authorization: "Bearer " + token,
+  Accept: "application/vnd.github+json",
+});
 
 module.exports = async function handler(req, res) {
   if (req.method === "GET") {
-    return res.status(200).json({
-      ok: true,
-      hint: 'POST JSON { pin, data } with the DASHBOARD_DATA payload to publish.',
-    });
+    return res.status(200).json({ ok: true, hint: "POST { pin, data } with the DASHBOARD_DATA payload to publish it globally." });
   }
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
+  }
+
+  const c = config();
+  if (!c.token) {
+    return res.status(503).json({
+      ok: false,
+      error: "Global publishing is not configured on the server yet — set GH_PAT (and GITHUB owner/repo/branch if needed) under Vercel environment variables.",
+    });
   }
 
   let body;
@@ -43,42 +55,51 @@ module.exports = async function handler(req, res) {
   if (body.pin !== PUBLISH_PIN) {
     return res.status(403).json({ ok: false, error: "Wrong pin" });
   }
-  const text = body.data;
-  if (typeof text !== "string") {
-    return res.status(400).json({ ok: false, error: "Missing data string" });
-  }
-  let parsed;
+  const text = String(body.data || "");
   try {
-    parsed = JSON.parse(text);
+    const parsed = JSON.parse(text);
+    if (!parsed || !parsed.meta || !parsed.punchcard) {
+      return res.status(400).json({ ok: false, error: "Not a dashboard payload" });
+    }
   } catch (e) {
     return res.status(400).json({ ok: false, error: "Data is not valid JSON" });
   }
-  if (!parsed || !parsed.meta || !parsed.punchcard) {
-    return res.status(400).json({ ok: false, error: "Not a dashboard payload" });
-  }
+
+  const script = "window.DASHBOARD_DATA = " + text + ";\n";
+  const base = `https://api.github.com/repos/${c.owner}/${c.repo}/contents/data.js`;
 
   try {
-    const base = baseDir();
-    const stamp = String(Date.now());
-
-    // Atomically replace data.js so fully-loaded pages always read consistent content.
-    const dataPath = path.join(base, "data.js");
-    const tmp = dataPath + ".tmp-" + stamp;
-    fs.writeFileSync(tmp, "window.DASHBOARD_DATA = " + text + ";\n", "utf8");
-    fs.renameSync(tmp, dataPath);
-
-    // Bump the cache-busting version stamps on index.html so browsers refetch data.js.
-    const idxPath = path.join(base, "index.html");
-    if (fs.existsSync(idxPath)) {
-      const html = fs.readFileSync(idxPath, "utf8");
-      const updated = html.replace(
-        /((?:src|href)=")(assets\/(?:style\.css|app\.js)|data\.js)(\?v=\d+)?(")/g,
-        "$1$2?v=" + stamp + "$4",
-      );
-      fs.writeFileSync(idxPath, updated, "utf8");
+    // Fetch the current file (to keep the sha for an atomic overwrite).
+    let sha = null;
+    const curRes = await fetch(base, { headers: GH_HEADERS(c.token) });
+    if (curRes.status === 200) {
+      const cur = await curRes.json();
+      sha = cur.sha || null;
     }
 
-    return res.status(200).json({ ok: true, size: text.length, stamped: stamp });
+    const payload = {
+      message: "auto-publish dashboard data (" + new Date().toISOString() + ")",
+      content: Buffer.from(script, "utf8").toString("base64"),
+      branch: c.branch,
+    };
+    if (sha) payload.sha = sha;
+
+    const upRes = await fetch(base, {
+      method: "PUT",
+      headers: Object.assign({ "Content-Type": "application/json" }, GH_HEADERS(c.token)),
+      body: JSON.stringify(payload),
+    });
+    if (!upRes.ok) {
+      const errText = (await upRes.text()).slice(0, 300);
+      return res.status(502).json({ ok: false, error: "GitHub refused the write (" + upRes.status + "): " + errText });
+    }
+    const up = await upRes.json();
+    return res.status(200).json({
+      ok: true,
+      size: Buffer.byteLength(script, "utf8"),
+      commit: up.commit && up.commit.sha,
+      html_url: up.commit && up.commit.html_url,
+    });
   } catch (e) {
     return res.status(500).json({ ok: false, error: String((e && e.message) || e) });
   }

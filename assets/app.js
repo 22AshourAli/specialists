@@ -19,15 +19,17 @@
       chpCurr: "العملة:",
       slxOffice: "المكتب",
       slxYear: "السنة",
+      slxMonth: "الشهر",
       slxRange: "الفترة الزمنية",
       slxQism: "القسم",
+      mthAll: "كل الشهور",
       rngFull: "السنة كاملة", rngYtd: "حتى {0}", rngLast6: "آخر 6 أشهر", rngLast3: "آخر 3 أشهر",
       yearhint: "اختر 'الكل' لعرض إجمالي كل الفترات — أو سنة معيّنة للمقارنة",
       all: "الكل",
       allYears: "الكل (الجمع بين السنوات)",
       yearPre: "سنة ",
       btnUpdate: "تحديث البيانات",
-      btnDl: "نسخة احتياطية (JSON)",
+      btnDl: "نسخة احتياطية (Excel)",
       uploadAsk: "ارفع ملف الإكسل (تقرير اعمال المختصون …xlsx) وسيتم إعادة بناء اللوحة فوراً",
       cardEsn: "إجمالي الإسناد",
       cardEnt: "إجمالي الإنتاجية",
@@ -78,9 +80,11 @@
       toastDiff: "تم تحديث الأرقام ✓ {0}",
       toastSame: "تمت قراءة الملف بنجاح، والأرقام متطابقة تماماً مع ما في اللوحة — لا يوجد تغيير في القيم أو عدد الصفوف",
       toastDup: "تم تجاهل {0} صف مكرر مطابق حرفياً لصف محسوب مسبقاً (حتى لا يُحتسب الإجمالي مرتين) — مثال:{1}",
-      toastSaved: "تم تصدير نسخة احتياطية data.json — ملف JSON آمن يفتح في أي محرر نصوص",
+      toastSaved: "تم تصدير نسخة احتياطية Excel احترافية (ملخص + بيانات كاملة) — يفتح في أي برنامج جداول",
       toastNew: "البيانات مأخوذة من ملف مرفوع محفوظ محلياً",
+      toastSynced: "تم مزامنة أحدث البيانات المنشورة من الخادم ✓",
       badgeLocal: "مرفوع",
+      badgeRemote: "منشور عالمياً",
       btnPublish: "نشر التحديث",
       publishOk: "تم نشر التحديث بنجاح ✓ — سيطّلعه الجميع خلال دقيقة",
       publishErr: "تعذّر النشر على الخادم — التحديث تطبّق محلياً فقط",
@@ -109,15 +113,17 @@
       chpCurr: "Currency:",
 slxOffice: "Office",
       slxYear: "Year",
+      slxMonth: "Month",
       slxRange: "Time range",
       slxQism: "Section",
+      mthAll: "All months",
       rngFull: "Full year", rngYtd: "Up to {0}", rngLast6: "Last 6 months", rngLast3: "Last 3 months",
       yearhint: "Pick 'All' for the combined total — or an exact year to compare",
       all: "All",
       allYears: "All (combined years)",
       yearPre: "Year ",
       btnUpdate: "Update Data",
-      btnDl: "Backup (JSON)",
+      btnDl: "Backup (Excel)",
       uploadAsk: "Upload the Excel file (تقرير اعمال المختصون …xlsx) and the dashboard will rebuild instantly",
       cardEsn: "Total Attribution",
       cardEnt: "Total Productivity",
@@ -168,9 +174,11 @@ slxOffice: "Office",
       toastDiff: "Numbers updated ✓ {0}",
       toastSame: "File read successfully; numbers match the dashboard exactly — no change in values or row count",
       toastDup: "Ignored {0} duplicate row(s) matching a row already counted (to avoid double counting) — e.g.:{1}",
-      toastSaved: "Exported data.json backup — safe JSON, opens in any text editor",
+      toastSaved: "Exported a professional Excel backup (summary + full data) — opens in any spreadsheet app",
       toastNew: "Data loaded from a locally saved uploaded file",
+      toastSynced: "Synced the latest published data from the server ✓",
       badgeLocal: "uploaded",
+      badgeRemote: "published globally",
       btnPublish: "Publish",
       publishOk: "Update published ✓ — everyone will see it within a minute",
       publishErr: "Could not publish to the server — updated locally only",
@@ -521,8 +529,8 @@ slxOffice: "Office",
         years[y] = (years[y] || 0) + v;
       }
     }
-    Object.keys(years).forEach(function (y) { years[y] = Math.round(years[y] * 10000) / 10000; });
-    return { agg: Math.round(agg * 10000) / 10000, years: years };
+    Object.keys(years).forEach(function (y) { years[y] = r4(years[y]); });
+    return { agg: r4(agg), years: years };
   }
 
   // Detects standalone office sheets (anything outside the standard set) and exposes
@@ -553,7 +561,7 @@ slxOffice: "Office",
         if (!punch[yk]) punch[yk] = {};
         if (!punch[yk][label]) punch[yk][label] = {};
         var v = (yk === "agg") ? extras[label].agg : ((extras[label].years || {})[Number(yk)] || 0);
-        punch[yk][label]["_total"] = [Math.round(v * 10000) / 10000, 0, 0];
+        punch[yk][label]["_total"] = [r4(v), 0, 0];
       });
     });
   }
@@ -646,7 +654,7 @@ slxOffice: "Office",
   /* =========================================================
      State & filters
   ========================================================= */
-  var S = { offices: [], year: "agg", m1: 1, m2: 12, qism: "الكل" };
+  var S = { offices: [], year: "agg", month: null, m1: 1, m2: 12, qism: "الكل" };
 
   function yearsSel() {
     return S.year === "agg" ? [2023, 2024, 2025, 2026] : [Number(S.year)];
@@ -1127,7 +1135,43 @@ slxOffice: "Office",
     sel.value = String(S.year);
     if (!yearBound) {
       yearBound = true;
-      sel.addEventListener("change", function () { S.year = sel.value; refresh(); });
+      sel.addEventListener("change", function () {
+        S.year = sel.value;
+        S.month = null; // a year change resets any pinned month
+        refresh();
+      });
+    }
+  }
+
+  var monthBound = false;
+  // Pins the dashboard to a single month (m1 == m2). Empty value = "all months"
+  // (back to the time-range pills).
+  function buildMonthSlicer() {
+    var sel = document.getElementById("slicerMonth");
+    if (!sel) return;
+    var html = '<option value="">' + T("mthAll") + "</option>";
+    MONTHS().forEach(function (m, i) {
+      html += '<option value="' + (i + 1) + '">' + m + "</option>";
+    });
+    sel.innerHTML = html;
+    sel.value = S.month === null ? "" : String(S.month);
+    if (!monthBound) {
+      monthBound = true;
+      sel.addEventListener("change", function () {
+        if (sel.value === "") {
+          // Back to a time range: restore the last range that was active before pinning.
+          var prev = S._range || [1, Math.max(1, S.m2)];
+          S.m1 = prev[0];
+          S.m2 = prev[1];
+          S.month = null;
+        } else {
+          S._range = [S.m1, S.m2]; // remember the range we are overriding
+          S.month = Number(sel.value);
+          S.m1 = S.month;
+          S.m2 = S.month;
+        }
+        refresh();
+      });
     }
   }
 
@@ -1154,12 +1198,13 @@ slxOffice: "Office",
       { k: "last3", lbl: T("rngLast3"), r: [Math.max(1, lastM - 2), lastM], show: lastM > 3 },
     ].filter(function (d) { return d.show !== false; });
     var html = defs.map(function (d) {
-      var on = S.m1 === d.r[0] && S.m2 === d.r[1];
+      var on = S.month === null && S.m1 === d.r[0] && S.m2 === d.r[1];
       return '<span class="pill' + (on ? " on" : "") + '" data-m1="' + d.r[0] + '" data-m2="' + d.r[1] + '">' + d.lbl + "</span>";
     }).join("");
     el.innerHTML = html;
     el.querySelectorAll(".pill").forEach(function (p) {
       p.addEventListener("click", function () {
+        S.month = null; // picking a range clears any pinned month
         S.m1 = Number(p.getAttribute("data-m1"));
         S.m2 = Number(p.getAttribute("data-m2"));
         refresh();
@@ -1188,6 +1233,8 @@ slxOffice: "Office",
   function refresh() {
     if (!S.offices.length) S.offices = allOffices();
     document.getElementById("slicerYear").value = String(S.year);
+    var ms = document.getElementById("slicerMonth");
+    if (ms) ms.value = S.month === null ? "" : String(S.month);
     buildOfficeSlicer();
     buildRangeSlicer();
     renderCards();
@@ -1249,6 +1296,7 @@ slxOffice: "Office",
     document.getElementById("fabWa").title = T("waTip");
     setThemeUI();
     buildYearSlicer();
+    buildMonthSlicer();
     refresh();
   }
 
@@ -1379,12 +1427,103 @@ slxOffice: "Office",
     rd.readAsDataURL(f);
   }
 
+  /* =========================================================
+     Excel backup export — a structured, styled workbook
+  ========================================================= */
+  function r4(x) { return Math.round((x || 0) * 10000) / 10000; }
+
+  function aoaSheet(rows, widths) {
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    if (widths) ws["!cols"] = widths.map(function (w) { return { wch: w }; });
+    return ws;
+  }
+
+  // Bolds the first row and gives it a navy fill (readable header).
+  function styleFirstRow(ws) {
+    if (!ws || !ws["!ref"]) return ws;
+    var rng = XLSX.utils.decode_range(ws["!ref"]);
+    for (var c = rng.s.c; c <= rng.e.c; c++) {
+      var addr = XLSX.utils.encode_cell({ r: 0, c: c });
+      if (ws[addr]) ws[addr].s = {
+        font: { bold: true, color: { rgb: "FFFFFF" } },
+        fill: { patternType: "solid", fgColor: { rgb: "1F3A5F" } },
+        alignment: { vertical: "center", horizontal: "center" },
+        border: { bottom: { style: "thin", color: { rgb: "0F2440" } } },
+      };
+    }
+    return ws;
+  }
+
+  // Headline figures used by the summary sheet (agnostic to the current filters).
+  function kpiSummary() {
+    var t = punchTotals("agg", allOffices(), 1, 12);
+    return [
+      [T("cardEsn"), t.esnad],
+      [T("cardEnt"), t.entajia],
+      [T("cardFou"), t.foutra],
+      [T("cardInv"), D.invoices.foutra_shamel],
+      [T("cardPaid"), D.invoices.paid_total],
+      [T("cardUnb"), D.unbilled.total],
+      [T("cardSap"), D.sap.totals.shamel],
+      [T("footInvN"), D.meta.counts.invoices],
+      [T("footUnbN"), D.meta.counts.unbilled],
+      [T("chpUpdated"), String(D.meta.generated_at)],
+      [T("chpSource"), String(D.meta.source)],
+    ];
+  }
+
   function downloadData() {
-    if (!D) return;
-    var blob = new Blob([JSON.stringify(D, null, 1)], { type: "application/json;charset=utf-8" });
+    if (!D || typeof XLSX === "undefined") return;
+    var wb = XLSX.utils.book_new();
+    var lbl = lang === "ar" ? ["البيان", "القيمة"] : ["Item", "Value"];
+
+    // Summary: headline figures + metadata.
+    var sum = [lbl].concat(kpiSummary());
+    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(sum, [40, 24])), "الملخص");
+
+    // Invoices detail.
+    var invRows = [["عقد", "قسم", "شهر", "سنه", "قيمة", "ضريبة", "شامل", "غرامات", "سلامه", "صافي", "مصروف", "مكتب"]];
+    D.invoices.detail.forEach(function (r) {
+      invRows.push([r["عقد"], r["قسم"], r["شهر"], r["سنه"], r["قيمة"], r["ضريبة"], r["shamel"], r["غرامات"], r["سلامه"], r["safy"], r["paid"], r["مكتب"]]);
+    });
+    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(invRows, [12, 10, 6, 6, 13, 13, 13, 13, 13, 13, 13, 12])), "الفواتير");
+
+    // Monthly matrix for the currently selected year.
+    var pc = D.punchcard[String(S.year)] || {};
+    var mths = [];
+    allOffices().forEach(function (off) {
+      var o = pc[off] || {};
+      for (var m = 1; m <= 12; m++) {
+        if (o[m] && (o[m][0] || o[m][1] || o[m][2])) mths.push([off, m, r4(o[m][0]), r4(o[m][1]), r4(o[m][2])]);
+      }
+    });
+    mths.unshift(["مكتب", "رقم الشهر", "إسناد", "إنتاجية", "فوترة"]);
+    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(mths, [16, 10, 14, 14, 14])), "الشهري");
+
+    // SAP detail.
+    var sapRows = [["مكتب", "عقد", "نوع", "موقف", "شهر", "سنه", "اسناد", "مفوتر", "ضريبه", "شامل"]];
+    D.sap.detail.forEach(function (r) { sapRows.push([r["مكتب"], r["عقد"], r["انوع"], r["موقف"], r["شهر"], r["سنه"], r["اسناد"], r["مفوتر"], r["ضريبه"], r["shamel"]]); });
+    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(sapRows, [14, 10, 12, 14, 6, 6, 14, 12, 12, 14])), "SAP");
+
+    // UDS detail.
+    var udsRows = [["مكتب", "شهر", "سنه", "اسناد", "مفوتر", "شامل", "صرف", "متبقي", "موقف", "افادة_فوتره", "افادة_تنفيذ"]];
+    D.uds.detail.forEach(function (r) {
+      udsRows.push([r["مكتب"], r["شهر"], r["سنه"], r["اسناد"], r["مفوتر"], r["shamel"], r["صرف"], r["متبقي"], r["موقف"], r["افادة_فوتره"], r["افادة_تنفيذ"]]);
+    });
+    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(udsRows, [14, 6, 6, 14, 12, 14, 12, 12, 10, 16, 16])), "UDS");
+
+    // Unbilled projects.
+    var unbRows = [["المشروع", "مبدئيه", "نهائيه", "رصيد_مفوتر"]];
+    D.unbilled.projects.forEach(function (p) { unbRows.push([p["name"], p["مبدئيه"], p["نهائيه"], p["رصيد_مفوتر"]]); });
+    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(unbRows, [44, 14, 14, 14])), "UNBILLED");
+
+    var out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    var blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "data.json";
+    var d = new Date();
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    a.download = "Mokhtasoon-backup-" + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + ".xlsx";
     document.body.appendChild(a);
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 400);
@@ -1417,6 +1556,54 @@ slxOffice: "Office",
       setLoading(btn, false);
       toast(T("publishErr"), "err");
     });
+  }
+
+  /* =========================================================
+     Global sync: adopt the latest published dataset (api/data)
+  ========================================================= */
+  // Reloads window.DASHBOARD_DATA from a remote script and returns true when the
+  // published data is newer than the locally loaded one.
+  function adoptRemote(script) {
+    try {
+      var before = window.DASHBOARD_DATA;
+      new Function(script)();
+      var nd = window.DASHBOARD_DATA;
+      if (!nd || !nd.meta || !nd.meta.generated_at) { window.DASHBOARD_DATA = before; return false; }
+      var cur = D && D.meta && D.meta.generated_at;
+      if (cur && cur >= nd.meta.generated_at) return false; // keep the newer local copy
+      D = nd;
+      DATA_FROM_UPLOAD = false;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Reflects the current dataset's metadata in the header chips.
+  function showSourceUI() {
+    document.getElementById("genAt").textContent = fmtSaudi12(D.meta.generated_at);
+    document.getElementById("srcName").textContent = D.meta.source;
+  }
+
+  function showRemoteSource() {
+    showSourceUI();
+    var badge = document.getElementById("srcBadge");
+    badge.style.display = "inline-block";
+    badge.textContent = T("badgeRemote");
+  }
+
+  // Best-effort pull of the published dataset once per page load (https only).
+  // Vercel/static hosts: the api/data route serves the repo's latest data.js.
+  function syncPublished() {
+    if (window.location.protocol !== "https:") return;
+    fetch("api/data?ts=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (txt) {
+        if (!txt || !adoptRemote(txt)) return;
+        showRemoteSource();
+        refresh();
+        updateFoot();
+        toast(T("toastSynced"), "ok");
+      })
+      .catch(function () { /* offline server is fine — fall back to bundled data */ });
   }
 
   function applyStagger() {
@@ -1462,6 +1649,7 @@ slxOffice: "Office",
 
   updateFoot();
   buildYearSlicer();
+  buildMonthSlicer();
   buildRangeSlicer();
   buildQismSlicer();
   applyStaticI18n();
@@ -1473,6 +1661,7 @@ slxOffice: "Office",
   refresh();
   updateFoot();
   applyStagger();
+  syncPublished();
 
   window.addEventListener("resize", function () {
     Object.keys(charts).forEach(function (k) { if (charts[k]) charts[k].resize(); });

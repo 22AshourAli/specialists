@@ -6,7 +6,7 @@
 <meta name="author" content="Ashour Ali">
 <link rel="icon" type="image/png" href="assets/images/logo$.png">
 <title data-i18n="docTitle">داشبورد أعمال المختصون</title>
-<link rel="stylesheet" href="assets/style.css?v=20260830160640">
+<link rel="stylesheet" href="assets/style.css?v=20260830163758">
 </head>
 <body>
 
@@ -45,7 +45,7 @@
     </button>
     <button class="btn ghost" id="dlBtn" type="button">
       <svg class="bi" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-      <span data-i18n="btnDl">نسخة احتياطية (JSON)</span>
+      <span data-i18n="btnDl">نسخة احتياطية (Excel)</span>
     </button>
     <input type="file" id="fileXlsx" accept=".xlsx" hidden>
   </div>
@@ -74,6 +74,14 @@
     </div>
     <select class="sel" id="slicerYear"></select>
     <div id="yearHint" class="yhint"></div>
+  </div>
+
+  <div class="sc">
+    <div class="lbl">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 9h18"/></svg>
+      <span data-i18n="slxMonth">الشهر</span>
+    </div>
+    <select class="sel" id="slicerMonth"></select>
   </div>
 
   <div class="sc">
@@ -164,7 +172,7 @@
 
 <script src="assets/echarts.min.js"></script>
 <script src="assets/xlsx.full.min.js"></script>
-<script src="data.js?v=20260830160640"></script>
-<script src="assets/app.js?v=20260830160640"></script>
+<script src="data.js?v=20260830163758"></script>
+<script src="assets/app.js?v=20260830163758"></script>
 </body>
 </html>
