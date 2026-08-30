@@ -95,7 +95,8 @@
       srcShowLocal: "عرض نسختي المرفوعة",
       srcShowGlobal: "عرض المنشور عالمياً",
       srcNewPublished: "يوجد إصدار منشور أحدث في السحابة — اضغط «عرض المنشور عالمياً» لاستعراضه",
-      uploadHelp: "لا يهم اسم الملف المرفوع — المهم أن يكون نسخة من نفس تقرير أعمال المختصون (6 أوراق: تقرير الاداره، تقرير الفواتير، UNBILLED، SAP، UDS، تقرير تفصيلي) وبنفس مواضع الخلايا والأعمدة؛ الشهور والسنوات والمجاميع تُقرأ تلقائياً، وأي اختلاف في الأوراق أو الخلايا يُرفض برسالة توضيحية",
+      uploadHelp: "لا يهم اسم الملف المرفوع — المهم أن يكون نسخة من نفس تقرير أعمال المختصون (6 أوراق رئيسية: تقرير الاداره، تقرير الفواتير، UNBILLED، SAP، UDS، تقرير تفصيلي) بنفس مواضع الخلايا؛ المصفوفة الشهرية للمكاتب (خريص، الشمال، الجنوب، طوارئ SAP) تُقرأ من «تقرير الاداره»، والمكاتب الإضافية (الدرعية، الشرق…) تُقرأ من أوراقها المنفصلة إن وُجدت، وأي نقص في الأوراق الرئيسية يُرفض برسالة توضيحية",
+      toastExtraWarn: "تنبيه: هذا الملف لا يحتوي أوراق المكاتب المنفصلة (مثل الدرعيه والشرق) — ستظهر مكاتب الدرعية والشرق بالأرقام صفر حتى تُرفع نسخة كاملة",
       btnPublish: "نشر التحديث",
       publishOk: "تم نشر التحديث بنجاح ✓ — سيطّلعه الجميع خلال دقيقة",
       publishErr: "تعذّر النشر على الخادم — التحديث تطبّق محلياً فقط",
@@ -193,7 +194,8 @@ slxOffice: "Office",
       srcShowLocal: "Show my uploaded copy",
       srcShowGlobal: "Show the published version",
       srcNewPublished: "A newer published version exists in the cloud — tap \"Show the published version\"",
-      uploadHelp: "The uploaded filename doesn't matter — the file must be a copy of the same Mokhtasoon work report (6 sheets: تقرير الاداره، تقرير الفواتير، UNBILLED، SAP، UDS، تقرير تفصيلي) with the same cell/column layout; months, years and totals are read automatically and any sheet/cell mismatch is rejected with a clear message",
+      uploadHelp: "The uploaded filename doesn't matter — the file must be a copy of the same Mokhtasoon work report (6 core sheets: تقرير الاداره، تقرير الفواتير، UNBILLED، SAP، UDS، تقرير تفصيلي) with the same cell layout; the monthly office matrix (خريص، الشمال، الجنوب، طوارئ SAP) is read from «تقرير الاداره», extra offices (الدرعية، الشرق…) are read from their own separate sheets when present, and missing core sheets are rejected with a clear message",
+      toastExtraWarn: "Note: this file has no separate office sheets (e.g. الدرعيه, الشرق) — the extra offices (الدرعية، الشرق) will stay at zero until a complete file is uploaded",
       btnPublish: "Publish",
       publishOk: "Update published ✓ — everyone will see it within a minute",
       publishErr: "Could not publish to the server — updated locally only",
@@ -1453,6 +1455,11 @@ slxOffice: "Office",
           toast(T("toastMissing") + " " + missing.join("، "), "err");
           return;
         }
+        var CORE = ["UNBILLED", "تقرير الاداره", "تقرير الفواتير", "SAP", "UDS", "تقرير تفصيلي"];
+        var extrasFound = srcWb.SheetNames.some(function (sn) {
+          return CORE.indexOf(String(sn || "").trim()) < 0;
+        });
+        if (!extrasFound) toast(T("toastExtraWarn"), "");
         var prev = figuresOf(D);
         D = buildFromWorkbook(srcWb, f.name);
         DATA_FROM_UPLOAD = true;
