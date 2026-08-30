@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-محوّل بيانات داشبورد المختصون
-يقرأ ملف الإكسل "تقرير اعمال المختصون ... xlsx" ويولّد ملف data.js
-الاستخدام:  python reader.py  [path-to-xlsx]
+Mokhtasoon dashboard data converter.
+Reads the monthly Excel file "تقرير اعمال المختصون ... xlsx" and generates data.js.
+Usage: python reader.py [path-to-xlsx]
+Tip: the latest month's file on the Desktop is auto-detected when no path is given.
 """
 import sys
 import os
@@ -17,23 +18,38 @@ import pandas as pd
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_SRC = r"C:\Users\GH\Desktop\تقرير اعمال المختصون يونيو.xlsx"
+FILE_PREFIX = "تقرير اعمال المختصون"
+NOTES = ["UNBILLED", "تقرير الاداره", "تقرير الفواتير", "SAP", "UDS", "تقرير تفصيلي"]
+NAME_FIX = {"الدرعيه": "الدرعية"}  # sheet name -> clean Arabic office name
+
+
+def _desktop_candidates():
+    """Possible Desktop locations; the Windows profile can vary between environments."""
+    candidates = []
+    for var in ("USERPROFILE", "HOME"):
+        base = os.environ.get(var)
+        if base:
+            candidates.append(os.path.join(base, "Desktop"))
+    candidates.append(os.path.join(os.path.expanduser("~"), "Desktop"))
+    for home in (r"C:\Users\GH", r"C:\Users\Ashour"):
+        if os.path.isdir(home):
+            candidates.append(os.path.join(home, "Desktop"))
+    return candidates
 
 
 def find_source(arg=None):
+    """Resolve the Excel source: an explicit path, or the newest monthly file on the Desktop."""
     if arg and os.path.exists(arg):
         return arg
-    if os.path.exists(DEFAULT_SRC):
-        return DEFAULT_SRC
-    hits = sorted(
-        glob.glob(r"C:\Users\GH\Desktop\*.xlsx"),
-        key=os.path.getmtime,
-        reverse=True,
-    )
-    hits = [h for h in hits if "مختص" in h or "ملف" in h]
-    if hits:
-        return hits[0]
-    raise FileNotFoundError("لم أجد ملف الإكسل. مرّر المسار كمعامل: python reader.py الملف.xlsx")
+    for desk in _desktop_candidates():
+        hits = sorted(
+            glob.glob(os.path.join(desk, FILE_PREFIX + "*.xlsx")),
+            key=os.path.getmtime,
+            reverse=True,
+        )
+        if hits:
+            return hits[0]
+    raise FileNotFoundError("No dashboard file found on the Desktop. Pass a path: python reader.py file.xlsx")
 
 
 def clean(v):
@@ -59,14 +75,14 @@ def num(v):
 
 
 def parse_month_year(row, mcol, ycol):
-    """Iso الشهر/السنة الموجودين كرقم أو كتاريخ."""
+    """Extract the month/year pair stored as number or date in the given cells."""
     m = num(row[mcol]) if mcol is not None else 0
     y = num(row[ycol]) if ycol is not None else 0
     return int(m), int(y)
 
 
 # ======================================================================
-#  1) تقرير الإدارة  ->  بطاقة الإسناد / الإنتاجية / الفوترة الشهرية
+#  1) Admin report  ->  monthly esnad / entajia / foutra punchcard
 # ======================================================================
 OFFICE_BLOCKS = {
     "مكتب خريص": [("اسناد", 1), ("انتاجيه", 2), ("فوتره", 3)],
@@ -80,15 +96,15 @@ OFFICE_BLOCKS = {
 }
 METRIC_KEYS = ["اسناد", "انتاجيه", "فوتره"]
 
-# (label, first_month_row, last_month_row, total_row) — يُرمَّز بعد الكشف الديناميكي
+# (label, first_month_row, last_month_row, total_row) — encoded after dynamic detection
 ADM_ORDER = ["agg", "2023", "2024", "2025", "2026_قديم", "2026_جديد"]
 YEAR_MAP = {"agg": "agg", "2023": 2023, "2024": 2024, "2025": 2025,
             "2026_قديم": 2026, "2026_جديد": 2026}
 
 
 def find_adm_blocks(adm):
-    """يكشف كتل السنوات ديناميكياً بدلاً من الصفوف الثابتة (يسمح بإضافة/حذف صفوف).
-    كل كتلة تبدأ بسطر 'الشهر' تليه صفوف شهور وتنتهي بسطر 'الإجمالي'."""
+    """Detect the year blocks dynamically instead of fixed rows (allows added/removed rows).
+    Each block starts with a 'الشهر' line, holds 'month' rows and ends with 'الإجمالي'."""
     blocks = []
     nrows = len(adm)
 
@@ -133,7 +149,7 @@ def find_adm_blocks(adm):
 
 
 def read_punchcard(adm):
-    """إرجاع: punchcard[year_label][office][month] = [اسناد, انتاجيه, فوتره]"""
+    """Return punchcard[year_label][office][month] = [esnad, entajia, foutra]."""
     blocks = find_adm_blocks(adm)
     punch = {}
     for bi, (r0, r1, rtot) in enumerate(blocks):
@@ -170,11 +186,78 @@ def read_punchcard(adm):
     return punch
 
 
+def read_office_sheet(df):
+    """Read annual assignment totals from a standalone office sheet ("خريص", "الشرق", ...).
+    Layout: blocks titled "تفاصيل أوامر العمل المسنده ... عقد قديم/جديد" followed by
+    السنه / القسم / القيمه / الإجمالي rows. Old contract: yearly UDS columns with a
+    single SAP total; new contract: alternating UDS/SAP pairs per year."""
+    nrows, ncols = df.shape
+
+    def cell(r, c):
+        if r < 0 or c < 0 or r >= nrows or c >= ncols:
+            return ""
+        v = df.iat[r, c]
+        if v is None:
+            return ""
+        try:
+            if pd.isna(v):
+                return ""
+        except Exception:
+            pass
+        return str(v).strip()
+
+    blocks = []
+    for r in range(nrows):
+        t = cell(r, 0)
+        if not t.startswith("تفاصيل أوامر العمل المسنده"):
+            continue
+        hdr, val = r + 1, r + 3
+        if cell(hdr, 0) != "السنه" or cell(val, 0) != "القيمه":
+            continue
+        blocks.append({"old": "عقد قديم" in t, "hdr": hdr, "val": val})
+
+    agg = 0.0
+    yearly = {}
+    for b in blocks:
+        hdr, val = b["hdr"], b["val"]
+        ycols = {}
+        for c in range(1, ncols):
+            if re.match(r"^20\d\d$", cell(hdr, c)):
+                ycols[int(cell(hdr, c))] = c
+        agg += num(df.iat[val, 9]) + num(df.iat[val, 10])
+        for y, c in ycols.items():
+            v = num(df.iat[val, c])
+            if not b["old"] and c + 1 < ncols:
+                v += num(df.iat[val, c + 1])
+            yearly[y] = yearly.get(y, 0.0) + v
+    # Note: old-contract SAP is only available as a total (already in `agg`);
+    # per-year entries carry UDS (SAP is zero in the current files).
+    return {
+        "agg": round(agg, 4),
+        "years": {k: round(v, 4) for k, v in yearly.items()},
+    }
+
+
+def office_extra_sheets(xl):
+    """Map standalone office sheets (outside the standard set) to their yearly totals."""
+    excluded = {n.strip() for n in NOTES}
+    out = {}
+    for sh in xl.sheet_names:
+        st = str(sh).strip()
+        if st in excluded or not st:
+            continue
+        label = "مكتب " + NAME_FIX.get(st, st)
+        if label in OFFICE_BLOCKS:
+            continue
+        out[label] = read_office_sheet(xl.parse(sh, header=None))
+    return out
+
+
 # ======================================================================
-#  2) تقرير الفواتير  (المصروفات - المفوترة - ما تم صرفه)
+#  2) Invoices report  (billed - invoiced - paid)
 # ======================================================================
 def read_invoices(inv):
-    """إرجاع هيكل الفواتير: تلخيص + تفاصيل شهرية."""
+    """Return the invoice structure: yearly summary + monthly detail."""
     inv_years = [2023, 2024, 2025, 2026]
     cols = {2023: 4, 2024: 7, 2025: 10, 2026: 13}
     summary = {}
@@ -207,7 +290,7 @@ def read_invoices(inv):
                     return (int(m.group(1)), int(m.group(2)))
         return last
 
-    # التفاصيل (تبدأ من الصف 9)
+    # Detail starts at row 9
     detail = []
     max_year = 2026
     last = None
@@ -253,7 +336,7 @@ def read_invoices(inv):
         }
         detail.append(row)
 
-    # إزالة الفواتير المكررة تماماً (نفس كل الحقول بما فيها الأرقام التعريفية)
+    # Drop fully-duplicated rows (same every field including identifying values)
     dropped = []
     seen = set()
     unique = []
@@ -284,7 +367,7 @@ def read_invoices(inv):
 
 
 # ======================================================================
-#  3) أوراق SAP و UDS  (إجماليات + حسب السنة / المكتب)
+#  3) SAP and UDS sheets  (totals + per year / office)
 # ======================================================================
 def read_sap(sap):
     rows = []
@@ -347,7 +430,7 @@ def read_uds(uds):
 
 
 # ======================================================================
-#  4) UNBILLED  (غير المفوتر)
+#  4) UNBILLED  (unbilled revenue)
 # ======================================================================
 def read_unbilled(unb):
     projects = []
@@ -367,18 +450,18 @@ def read_unbilled(unb):
 
 
 # ======================================================================
-#  5) تقرير تفصيلي  ->  الإسناد السنوي حسب القسم UDS/SAP
+#  5) Type split  ->  annual esnad by section UDS/SAP
 # ======================================================================
 def read_type_split(tf):
-    """كل سنة -> {UDS, SAP} من جدول تفاصيل الأعمال.""" 
+    """Each year -> {UDS, SAP} read from the work-details table."""
     out = {}
-    # عقد قديم: صف 4 فيه القيم منذ 2023 حتى 2026 (أعمدة UDS ثم SAP)
+    # Old contract: row 4 holds values for 2023..2026 (UDS then SAP columns)
     base = tf.iloc[4]
     years = [2023, 2024, 2025, 2026]
     for k, y in enumerate(years):
         c = 1 + k * 2
         out[y] = {"UDS": num(base[c]), "SAP": num(base[c + 1])}
-    # عقد جديد: صف 13 القيم تبدأ من 2026
+    # New contract: row 13, values start at 2026
     if len(tf) > 13:
         base2 = tf.iloc[13]
         if num(base2[1]) or num(base2[2]):
@@ -391,7 +474,7 @@ def read_type_split(tf):
 
 
 # ======================================================================
-#  تجميع
+#  Assembly
 # ======================================================================
 def build(src):
     xl = pd.ExcelFile(src)
@@ -409,8 +492,15 @@ def build(src):
     unbilled = read_unbilled(unb)
     type_split = read_type_split(tf)
 
-    # تصحيح الفواتير المكررة: خصم قيمتها من شهر/مكتب المطابق في البطاقة
-    # (مرة واحدة لكل فاتورة فريدة، وليس لكل نسخة مكررة — حتى لا تُخصم مرتين)
+    # Extra offices (الشرق / الدرعية) only carry annual assignment totals - no monthly data.
+    extra = office_extra_sheets(xl)
+    for label, tot in extra.items():
+        for yk in ["agg", 2023, 2024, 2025, 2026]:
+            v = tot["agg"] if yk == "agg" else tot["years"].get(yk, 0.0)
+            punch.setdefault(yk, {}).setdefault(label, {})["_total"] = [v, 0.0, 0.0]
+
+    # Compensate duplicated invoices: subtract their value from the matching month/office
+    # in the punchcard (once per unique invoice, not per duplicate copy).
     seen_d = set()
     for drop in invoices["deduped_drops"]:
         sig = drop.get("_sig")
@@ -426,16 +516,16 @@ def build(src):
                 if "_total" in punch[yb][off]:
                     punch[yb][off]["_total"][2] -= drop["قيمة"]
 
-    # ترتيب الصفوف في بيانات الفواتير/التفاصيل حسب الشهر ثم السنة
+    # Sort invoice/detail rows by year then month
     invoices["detail"].sort(key=lambda d: (d["سنه"], d["شهر"]))
 
     data = {
         "meta": {
             "title": "ملخص أعمال المختصون",
             "source": os.path.basename(src),
-            "generated_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "years": ["agg", 2023, 2024, 2025, 2026],
-            "offices": list(OFFICE_BLOCKS.keys()),
+            "offices": list(OFFICE_BLOCKS.keys()) + list(extra.keys()),
             "months": list(range(1, 13)),
             "counts": {
                 "invoices": len(invoices["detail"]),
@@ -461,7 +551,7 @@ def main():
     with open(out, "w", encoding="utf-8") as f:
         f.write(js)
 
-    # إضافة بصمة إصدار لملفات الأصول كي لا يحتفظ المتصفح بنسخة قديمة عند كل تحديث
+    # Stamp asset versions in index.html so browsers don't keep a stale cached copy
     stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
     idx = os.path.join(HERE, "index.html")
     with open(idx, "r", encoding="utf-8") as f:
@@ -474,29 +564,28 @@ def main():
     with open(idx, "w", encoding="utf-8") as f:
         f.write(html)
 
-    pc = data["punchcard"]["agg"]
-    print("== التحقق من الأرقام ==")
-    print("إجمالي الإسناد (agg):", data["punchcard"]["agg"]["مكتب خريص"]["_total"][0] +
-          data["punchcard"]["agg"]["مكتب الشمال"]["_total"][0] +
-          data["punchcard"]["agg"]["مكتب الجنوب"]["_total"][0] +
-          data["punchcard"]["agg"]["طوارئ SAP"]["_total"][0])
-    print("إجمالي الإنتاجية:", data["punchcard"]["agg"]["مكتب خريص"]["_total"][1] +
-          data["punchcard"]["agg"]["مكتب الشمال"]["_total"][1] +
-          data["punchcard"]["agg"]["مكتب الجنوب"]["_total"][1] +
-          data["punchcard"]["agg"]["طوارئ SAP"]["_total"][1])
-    print("إجمالي الفوترة:", data["punchcard"]["agg"]["مكتب خريص"]["_total"][2] +
-          data["punchcard"]["agg"]["مكتب الشمال"]["_total"][2] +
-          data["punchcard"]["agg"]["مكتب الجنوب"]["_total"][2] +
-          data["punchcard"]["agg"]["طوارئ SAP"]["_total"][2])
-    print("الفواتير شامل الضريبة:", data["invoices"]["foutra_shamel"])
-    print("ما تم صرفه:", data["invoices"]["paid_total"], "| تحقق من التفاصيل:", data["invoices"]["_check"])
-    print("SAP اسناد:", data["sap"]["totals"]["اسناد"], "مفوتر:", data["sap"]["totals"]["مفوتر"],
-          "شامل:", data["sap"]["totals"]["shamel"])
-    print("UDS اسناد:", data["uds"]["totals"]["اسناد"], "مفوتر بدون:", data["uds"]["totals"]["مفوتر"],
-          "صرف:", data["uds"]["totals"]["صرف"], "متبقي صرف:", data["uds"]["totals"]["متبقي"])
-    print("غير المفوتر:", data["unbilled"]["total"], "| مشاريع:", len(data["unbilled"]["projects"]))
-    print("تقسيم UDS/SAP سنوياً:", data["type_split"])
-    print("\nتم توليد:", out)
+    agg = data["punchcard"]["agg"]
+    offices = data["meta"]["offices"]
+    esn = sum(agg[o]["_total"][0] for o in offices)
+    ent = sum(agg[o]["_total"][1] for o in offices)
+    fou = sum(agg[o]["_total"][2] for o in offices)
+    print("== number verification ==")
+    print("total esnad (agg):", esn)
+    print("total entajia (agg):", ent)
+    print("total foutra (agg):", fou)
+    print("offices:", offices)
+    for o in offices:
+        t = agg[o]["_total"]
+        print("  -", o, "-> esnad", t[0], "| entajia", t[1], "| foutra", t[2])
+    print("invoices incl. VAT:", data["invoices"]["foutra_shamel"])
+    print("paid:", data["invoices"]["paid_total"], "| check:", data["invoices"]["_check"])
+    print("SAP esnad:", data["sap"]["totals"]["اسناد"], "billed:", data["sap"]["totals"]["مفوتر"],
+          "incl.:", data["sap"]["totals"]["shamel"])
+    print("UDS esnad:", data["uds"]["totals"]["اسناد"], "billed w/o:", data["uds"]["totals"]["مفوتر"],
+          "paid:", data["uds"]["totals"]["صرف"], "remaining:", data["uds"]["totals"]["متبقي"])
+    print("unbilled:", data["unbilled"]["total"], "| projects:", len(data["unbilled"]["projects"]))
+    print("type split by year:", data["type_split"])
+    print("\nGenerated:", out)
 
 
 if __name__ == "__main__":

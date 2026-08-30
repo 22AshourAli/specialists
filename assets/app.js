@@ -1,11 +1,13 @@
-/* =================== داشبورد المختصون — v2 =================== */
+/* =================== Mokhtasoon Dashboard — v2 =================== */
 (function () {
   "use strict";
 
   var LS_LANG = "dm_lang", LS_THEME = "dm_theme", LS_XLSX = "dm_xlsx_b64";
+  // Light gate against accidental writes; MUST match PUBLISH_PIN in api/update.js.
+  var PUBLISH_PIN = "mokh-2026!ash";
 
   /* =========================================================
-     الترجمة (العربية / الإنجليزية)
+     i18n (Arabic / English)
   ========================================================= */
   var STR = {
     ar: {
@@ -79,9 +81,16 @@
       toastSaved: "تم تصدير نسخة احتياطية data.json — ملف JSON آمن يفتح في أي محرر نصوص",
       toastNew: "البيانات مأخوذة من ملف مرفوع محفوظ محلياً",
       badgeLocal: "مرفوع",
-      offShort: { "مكتب خريص": "خريص", "مكتب الشمال": "الشمال", "مكتب الجنوب": "الجنوب", "طوارئ SAP": "طوارئ" },
+      btnPublish: "نشر التحديث",
+      publishOk: "تم نشر التحديث بنجاح ✓ — سيطّلعه الجميع خلال دقيقة",
+      publishErr: "تعذّر النشر على الخادم — التحديث تطبّق محلياً فقط",
+      publishBusy: "جارٍ نشر التحديث…",
+      offShort: {
+        "مكتب خريص": "خريص", "مكتب الشمال": "الشمال", "مكتب الجنوب": "الجنوب", "طوارئ SAP": "طوارئ",
+        "مكتب الدرعية": "الدرعية", "مكتب الشرق": "الشرق",
+      },
       mSoft: "", // Reserve
-      footNote: "لوحة تحكم تفاعلية مبنية على ملف <b>تقرير اعمال المختصون — يونيو</b> · جميع القيم بالريال السعودي (ر.س) شاملة الضريبة حيث تكون معرّفة · لتحديث البيانات: اضغط زر <b>تحديث البيانات</b> وارفع ملف الإكسل، أو شغّل ملف <b>تحديث الداشبورد.bat</b>",
+      footNote: "لوحة تحكم تفاعلية مبنية على ملف <b>تقرير اعمال المختصون</b> · جميع القيم بالريال السعودي (ر.س) شاملة الضريبة حيث تكون معرّفة · لتحديث البيانات: اضغط زر <b>تحديث البيانات</b> وارفع ملف الإكسل، أو شغّل ملف <b>تحديث الداشبورد.bat</b>",
       footInvN: "فواتير:",
       footUnbN: "مشروع غير مفوتر:",
       footDup: "صف مكرر مستبعد:",
@@ -162,9 +171,16 @@ slxOffice: "Office",
       toastSaved: "Exported data.json backup — safe JSON, opens in any text editor",
       toastNew: "Data loaded from a locally saved uploaded file",
       badgeLocal: "uploaded",
-      offShort: { "مكتب خريص": "Khurays", "مكتب الشمال": "Al-Shamal", "مكتب الجنوب": "Al-Junoub", "طوارئ SAP": "SAP Emerg." },
+      btnPublish: "Publish",
+      publishOk: "Update published ✓ — everyone will see it within a minute",
+      publishErr: "Could not publish to the server — updated locally only",
+      publishBusy: "Publishing…",
+      offShort: {
+        "مكتب خريص": "Khurays", "مكتب الشمال": "Al-Shamal", "مكتب الجنوب": "Al-Junoub", "طوارئ SAP": "SAP Emerg.",
+        "مكتب الدرعية": "Al-Diriyah", "مكتب الشرق": "Al-Sharq",
+      },
       mSoft: "", mSoft2: "",
-      footNote: "Interactive dashboard built from the file <b>تقرير اعمال المختصون — يونيو</b> · all amounts in SAR incl. VAT where defined · to update: press <b>Update Data</b> and upload the Excel file, or run <b>تحديث الداشبورد.bat</b>",
+      footNote: "Interactive dashboard built from the file <b>تقرير اعمال المختصون</b> · all amounts in SAR incl. VAT where defined · to update: press <b>Update Data</b> and upload the Excel file, or run <b>تحديث الداشبورد.bat</b>",
       footInvN: "Invoices:",
       footUnbN: "unbilled projects:",
       footDup: "duplicates excluded:",
@@ -208,7 +224,7 @@ slxOffice: "Office",
   document.documentElement.dir = (lang === "ar") ? "rtl" : "ltr";
 
   /* =========================================================
-     تحميل البيانات (ثابتة أو من ملف مرفوع محفوظ محلياً)
+     Data loading (static or from a locally saved upload)
   ========================================================= */
   var D = null;
   var DATA_FROM_UPLOAD = false;
@@ -240,7 +256,7 @@ slxOffice: "Office",
     return { m: Math.round(num(row[mc])), y: Math.round(num(row[yc])) };
   }
 
-  /* ---- نسخ منطق reader.py إلى JavaScript (للتحديث المباشر من الإكسل) ---- */
+  /* ---- mirrors reader.py (direct in-browser update from Excel) ---- */
   var OFFICE_BLOCKS = {
     "مكتب خريص": [["اسناد", 1], ["انتاجيه", 2], ["فوتره", 3]],
     "مكتب الشمال": [["اسناد", 4], ["انتاجيه", 5], ["فوتره", 6]],
@@ -254,7 +270,12 @@ slxOffice: "Office",
   var METRIC_KEYS = ["اسناد", "انتاجيه", "فوتره"];
   var ADM_ORDER = ["agg", "2023", "2024", "2025", "2026_قديم", "2026_جديد"];
   var YEAR_MAP = { agg: "agg", "2023": 2023, "2024": 2024, "2025": 2025, "2026_قديم": 2026, "2026_جديد": 2026 };
+  // Base monthly offices (from the admin report) — the month math below stays on these.
   var ALL_OFF = Object.keys(OFFICE_BLOCKS);
+  // Display list = base offices + any extra standalone office sheets in the source.
+  function allOffices() {
+    return (D && D.meta && D.meta.offices && D.meta.offices.length) ? D.meta.offices : ALL_OFF;
+  }
 
   function findAdmBlocks(adm) {
     function cellStr(r, c) {
@@ -473,6 +494,70 @@ slxOffice: "Office",
     return out;
   }
 
+  // Reads annual assignment totals from a standalone office sheet ("خريص", "الشرق", ...).
+  // Blocks are titled "تفاصيل أوامر العمل المسنده ... عقد قديم/جديد", followed by
+  // السنه / القسم / القيمه / الإجمالي rows. Old contract: yearly UDS columns plus a
+  // single SAP total; new contract: alternating UDS/SAP pairs per year.
+  function readOfficeSheet(rows) {
+    var cs = function (r, c) {
+      var v = rows[r] ? rows[r][c] : null;
+      return (v === null || v === undefined) ? "" : String(v).trim();
+    };
+    var agg = 0, years = {};
+    for (var r = 0; r < rows.length; r++) {
+      var title = cs(r, 0);
+      if (title.indexOf("تفاصيل أوامر العمل المسنده") !== 0) continue;
+      var oldBlock = title.indexOf("عقد قديم") > -1;
+      var hdr = r + 1, val = r + 3;
+      if (cs(hdr, 0) !== "السنه" || cs(val, 0) !== "القيمه") continue;
+      var ycols = {};
+      for (var c = 1; c < (rows[hdr] || []).length; c++) {
+        if (/^20\d\d$/.test(cs(hdr, c))) ycols[Number(cs(hdr, c))] = c;
+      }
+      agg += num((rows[val] || [])[9]) + num((rows[val] || [])[10]);
+      for (var y in ycols) {
+        var c2 = ycols[y];
+        var v = num((rows[val] || [])[c2]) + (oldBlock ? 0 : num((rows[val] || [])[c2 + 1]));
+        years[y] = (years[y] || 0) + v;
+      }
+    }
+    Object.keys(years).forEach(function (y) { years[y] = Math.round(years[y] * 10000) / 10000; });
+    return { agg: Math.round(agg * 10000) / 10000, years: years };
+  }
+
+  // Detects standalone office sheets (anything outside the standard set) and exposes
+  // them as extra offices carrying yearly/aggregate assignment totals.
+  function scanExtraOffices(srcWb) {
+    var EXCLUDED = {};
+    ["UNBILLED", "تقرير الاداره", "تقرير الفواتير", "SAP", "UDS", "تقرير تفصيلي"].forEach(function (n) {
+      EXCLUDED[n.trim()] = 1;
+    });
+    var NAME_FIX = { "الدرعيه": "الدرعية" };
+    var out = {};
+    srcWb.SheetNames.forEach(function (sn) {
+      var st = String(sn || "").trim();
+      if (!st || EXCLUDED[st]) return;
+      var label = "مكتب " + (NAME_FIX[st] || st);
+      if (OFFICE_BLOCKS[label]) return;
+      var rows = rowsOf(srcWb, sn);
+      if (!rows) return;
+      out[label] = readOfficeSheet(rows);
+    });
+    return out;
+  }
+
+  // Injects each extra office's assignment totals into the punchcard (agg + each year).
+  function addOfficeTotals(punch, extras) {
+    ["agg", 2023, 2024, 2025, 2026].forEach(function (yk) {
+      Object.keys(extras).forEach(function (label) {
+        if (!punch[yk]) punch[yk] = {};
+        if (!punch[yk][label]) punch[yk][label] = {};
+        var v = (yk === "agg") ? extras[label].agg : ((extras[label].years || {})[Number(yk)] || 0);
+        punch[yk][label]["_total"] = [Math.round(v * 10000) / 10000, 0, 0];
+      });
+    });
+  }
+
   function buildFromWorkbook(srcWb, fname) {
     var adm = rowsOf(srcWb, "تقرير الاداره");
     var inv = rowsOf(srcWb, "تقرير الفواتير");
@@ -487,6 +572,9 @@ slxOffice: "Office",
     invData.detail.sort(function (a, b) { return a["سنه"] - b["سنه"] || a["شهر"] - b["شهر"]; });
     assertTotals(sap, uds, unb);
     var punch = readPunchcard(adm);
+    var extras = scanExtraOffices(srcWb);
+    addOfficeTotals(punch, extras);
+    var extraNames = Object.keys(extras);
     var seenD = {};
     invData["deduped_drops"].forEach(function (drop) {
       if (seenD[drop._sig]) return;
@@ -506,7 +594,7 @@ slxOffice: "Office",
         source: fname,
         generated_at: new Date().toISOString(),
         years: ["agg", 2023, 2024, 2025, 2026],
-        offices: ALL_OFF.slice(),
+        offices: ALL_OFF.slice().concat(extraNames),
         months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
         counts: {
           invoices: invData.detail.length,
@@ -556,15 +644,15 @@ slxOffice: "Office",
   }
 
   /* =========================================================
-     الحالة والفلاتر
+     State & filters
   ========================================================= */
-  var S = { offices: ALL_OFF.slice(), year: "agg", m1: 1, m2: 12, qism: "الكل" };
+  var S = { offices: [], year: "agg", m1: 1, m2: 12, qism: "الكل" };
 
   function yearsSel() {
     return S.year === "agg" ? [2023, 2024, 2025, 2026] : [Number(S.year)];
   }
 
-  /* ---------- الاستخلاص ---------- */
+  /* ---------- extrapolation helpers ---------- */
   function punchTotals(year, offices, m1, m2) {
     var pc = D.punchcard[String(year)] || {};
     var es = 0, en = 0, fo = 0;
@@ -585,7 +673,7 @@ slxOffice: "Office",
   function officeEsnad(year) {
     var pc = D.punchcard[String(year)] || {};
     var out = {};
-    ALL_OFF.forEach(function (off) { var o = pc[off] || {}; out[off] = o._total ? o._total[0] : 0; });
+    allOffices().forEach(function (off) { var o = pc[off] || {}; out[off] = o._total ? o._total[0] : 0; });
     return out;
   }
 
@@ -611,7 +699,7 @@ slxOffice: "Office",
   }
 
   /* =========================================================
-     بطاقات المؤشرات
+     KPI cards
   ========================================================= */
   var ICONS = {
     clip: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>',
@@ -708,7 +796,7 @@ slxOffice: "Office",
   }
 
   /* =========================================================
-     الرسوم — ألوان حسب الثيم
+     Charts — theme-aware colors
   ========================================================= */
   var TH = {
     dark: {
@@ -724,6 +812,8 @@ slxOffice: "Office",
   };
   function th() { return TH[theme]; }
   function cur(n) { return money(n) + " " + curr(); }
+
+  var PALETTE = ["#22d3ee", "#6366f1", "#a78bfa", "#fbbf24", "#fb7185", "#60a5fa", "#34d399", "#f87171"];
 
   var charts = {};
   function initChart(id) {
@@ -812,7 +902,14 @@ slxOffice: "Office",
   function renderOffice() {
     var pc = D.punchcard[String(S.year)] || {};
     var t = th();
-    var series = S.offices.map(function (off, i) {
+    // Offices with monthly data only; keep all series when none has data (empty chart).
+    var shown = S.offices.filter(function (off) {
+      var o = pc[off] || {};
+      for (var m = S.m1; m <= S.m2; m++) if (o[m] && o[m][0] > 0) return true;
+      return false;
+    });
+    if (!shown.length) shown = S.offices.slice();
+    var series = shown.map(function (off, i) {
       var o = pc[off] || {};
       var arr = [];
       for (var m = S.m1; m <= S.m2; m++) arr.push(o[m] ? o[m][0] : 0);
@@ -994,12 +1091,13 @@ slxOffice: "Office",
   }
 
   /* =========================================================
-     الفلاتر
+     Filters
   ========================================================= */
   function buildOfficeSlicer() {
     var el = document.getElementById("slicerOffice");
-    var html = '<span class="pill' + (S.offices.length === ALL_OFF.length ? " on" : "") + '" data-k="all">' + T("all") + "</span>";
-    ALL_OFF.forEach(function (o) {
+    var offs = allOffices();
+    var html = '<span class="pill' + (S.offices.length === offs.length ? " on" : "") + '" data-k="all">' + T("all") + "</span>";
+    offs.forEach(function (o) {
       var on = S.offices.length === 1 && S.offices[0] === o;
       html += '<span class="pill' + (on ? " on" : "") + '" data-k="' + o + '" title="' + o + '">' + STR[lang].offShort[o] + "</span>";
     });
@@ -1007,9 +1105,9 @@ slxOffice: "Office",
     el.querySelectorAll(".pill").forEach(function (p) {
       p.addEventListener("click", function () {
         var k = p.getAttribute("data-k");
-        if (k === "all") S.offices = ALL_OFF.slice();
+        if (k === "all") S.offices = offs.slice();
         else {
-          if (S.offices.length === 1 && S.offices[0] === k) S.offices = ALL_OFF.slice();
+          if (S.offices.length === 1 && S.offices[0] === k) S.offices = offs.slice();
           else S.offices = [k];
         }
         refresh();
@@ -1088,6 +1186,7 @@ slxOffice: "Office",
   function setOffice(arr) { S.offices = arr; refresh(); }
 
   function refresh() {
+    if (!S.offices.length) S.offices = allOffices();
     document.getElementById("slicerYear").value = String(S.year);
     buildOfficeSlicer();
     buildRangeSlicer();
@@ -1102,7 +1201,7 @@ slxOffice: "Office",
   }
 
   /* =========================================================
-     شريط الأدوات: لغة / ثيم / تحديث / تنزيل
+     Toolbar: language / theme / update / download / publish
   ========================================================= */
   function applyStaticI18n() {
     document.querySelectorAll("[data-i18n]").forEach(function (el) {
@@ -1161,7 +1260,7 @@ slxOffice: "Office",
     refresh();
   }
 
-  /* ---------- التوست ---------- */
+  /* ---------- toasts ---------- */
   function toast(msg, kind) {
     var wrap = document.getElementById("toastWrap");
     if (!wrap) return;
@@ -1271,6 +1370,7 @@ slxOffice: "Office",
         if (df) toast(T("toastDiff", [df]), "ok");
         else if (nf.dups > prev.dups) toast(T("toastDup", [nf.dups - prev.dups, dupSample(D)]), "");
         else toast(T("toastSame"), "");
+        publishData();
       } catch (e) {
         setLoading(btn, false);
         toast(T("toastErrDetail") + " " + (e && e.message ? e.message : String(e)), "err");
@@ -1289,6 +1389,34 @@ slxOffice: "Office",
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 400);
     toast(T("toastSaved"), "ok");
+  }
+
+  // Publishes the current data to the hosted server (Vercel api/update) so everyone
+  // sees it. Best effort: locals (file:// / http dev) simply no-op.
+  var publishing = false;
+  function publishData() {
+    if (!D || publishing) return;
+    if (window.location.protocol !== "https:") return;
+    publishing = true;
+    var btn = document.getElementById("publishBtn");
+    setLoading(btn, true);
+    toast(T("publishBusy"), "");
+    fetch("api/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: PUBLISH_PIN, data: JSON.stringify(D) }),
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (j) {
+        publishing = false;
+        setLoading(btn, false);
+        if (res.ok && j && j.ok) toast(T("publishOk"), "ok");
+        else toast(T("publishErr"), "err");
+      });
+    }).catch(function () {
+      publishing = false;
+      setLoading(btn, false);
+      toast(T("publishErr"), "err");
+    });
   }
 
   function applyStagger() {
@@ -1312,28 +1440,27 @@ slxOffice: "Office",
       document.getElementById("fileXlsx").click();
     });
     document.getElementById("dlBtn").addEventListener("click", downloadData);
+    document.getElementById("publishBtn").addEventListener("click", publishData);
     document.getElementById("fileXlsx").addEventListener("change", handleFile);
   }
 
   /* =========================================================
-     الإقلاع
+     Boot
   ========================================================= */
   loadData();
   if (!D) return;
 
   initControls();
+  S.offices = allOffices();
 
-document.getElementById("genAt").textContent = fmtSaudi12(D.meta.generated_at);
+  document.getElementById("genAt").textContent = fmtSaudi12(D.meta.generated_at);
   document.getElementById("srcName").textContent = D.meta.source;
   if (DATA_FROM_UPLOAD) {
     document.getElementById("srcBadge").style.display = "inline-block";
     document.getElementById("srcBadge").textContent = T("badgeLocal");
   }
 
-  var PALETTE = ["#22d3ee", "#6366f1", "#a78bfa", "#fbbf24", "#fb7185", "#60a5fa", "#34d399", "#f87171"];
   updateFoot();
-
-  buildOfficeSlicer();
   buildYearSlicer();
   buildRangeSlicer();
   buildQismSlicer();
