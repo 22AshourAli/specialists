@@ -2,9 +2,16 @@
 (function () {
   "use strict";
 
-  var LS_LANG = "dm_lang", LS_THEME = "dm_theme", LS_XLSX = "dm_xlsx_b64";
+  var LS_LANG = "dm_lang", LS_THEME = "dm_theme", LS_XLSX = "dm_xlsx_b64", LS_MODE = "dm_mode";
   // Light gate against accidental writes; MUST match PUBLISH_PIN in api/update.js.
   var PUBLISH_PIN = "mokh-2026!ash";
+  // Where the live published data lives (same repo api/update writes to). Live
+  // reading is done straight from the raw CDN so the dashboard updates on ANY
+  // static host — no serverless bridge or server-side token needed to READ.
+  var GH_OWNER = "22AshourAli", GH_REPO = "specialists", GH_BRANCH = "master";
+  function liveDataURL() {
+    return "https://raw.githubusercontent.com/" + GH_OWNER + "/" + GH_REPO + "/" + GH_BRANCH + "/data.js?ts=" + Date.now();
+  }
 
   /* =========================================================
      i18n (Arabic / English)
@@ -85,6 +92,10 @@
       toastSynced: "تم مزامنة أحدث البيانات المنشورة من الخادم ✓",
       badgeLocal: "مرفوع",
       badgeRemote: "منشور عالمياً",
+      srcShowLocal: "عرض نسختي المرفوعة",
+      srcShowGlobal: "عرض المنشور عالمياً",
+      srcNewPublished: "يوجد إصدار منشور أحدث في السحابة — اضغط «عرض المنشور عالمياً» لاستعراضه",
+      uploadHelp: "لا يهم اسم الملف المرفوع — المهم أن يكون نسخة من نفس تقرير أعمال المختصون (6 أوراق: تقرير الاداره، تقرير الفواتير، UNBILLED، SAP، UDS، تقرير تفصيلي) وبنفس مواضع الخلايا والأعمدة؛ الشهور والسنوات والمجاميع تُقرأ تلقائياً، وأي اختلاف في الأوراق أو الخلايا يُرفض برسالة توضيحية",
       btnPublish: "نشر التحديث",
       publishOk: "تم نشر التحديث بنجاح ✓ — سيطّلعه الجميع خلال دقيقة",
       publishErr: "تعذّر النشر على الخادم — التحديث تطبّق محلياً فقط",
@@ -179,6 +190,10 @@ slxOffice: "Office",
       toastSynced: "Synced the latest published data from the server ✓",
       badgeLocal: "uploaded",
       badgeRemote: "published globally",
+      srcShowLocal: "Show my uploaded copy",
+      srcShowGlobal: "Show the published version",
+      srcNewPublished: "A newer published version exists in the cloud — tap \"Show the published version\"",
+      uploadHelp: "The uploaded filename doesn't matter — the file must be a copy of the same Mokhtasoon work report (6 sheets: تقرير الاداره، تقرير الفواتير، UNBILLED، SAP، UDS، تقرير تفصيلي) with the same cell/column layout; months, years and totals are read automatically and any sheet/cell mismatch is rejected with a clear message",
       btnPublish: "Publish",
       publishOk: "Update published ✓ — everyone will see it within a minute",
       publishErr: "Could not publish to the server — updated locally only",
@@ -630,18 +645,54 @@ slxOffice: "Office",
     } catch (e) { return null; }
   }
 
+  // Source-of-truth state:
+  //  - pinnedLocal=true  -> the locally uploaded draft wins (viewing mode "local")
+  //  - hasDraft          -> a valid uploaded draft exists in localStorage
+  //  - hasNewPublish     -> pinned locally while a DIFFERENT version is published
+  var pinnedLocal = false, hasDraft = false, hasNewPublish = false;
+
+  // Cheap fingerprint of a dataset used to detect "a different version is published".
+  function sigOf(d) {
+    if (!d || !d.meta) return "";
+    var c = d.meta.counts || {};
+    return [
+      d.invoices && d.invoices.foutra_shamel, d.invoices && d.invoices.paid_total,
+      d.sap && d.sap.totals && d.sap.totals.shamel, d.unbilled && d.unbilled.total,
+      c.invoices, c.dups, d.meta.generated_at
+    ].join("|");
+  }
+
+  // Shows/hides the header source badge; kind: "local" | "remote" | "none".
+  function setSourceBadge(kind, label) {
+    var badge = document.getElementById("srcBadge");
+    if (!badge) return;
+    if (!kind || kind === "none") { badge.style.display = "none"; return; }
+    badge.style.display = "inline-block";
+    badge.textContent = label || (kind === "local" ? T("badgeLocal") : T("badgeRemote"));
+  }
+
   function loadData() {
-    var srcWb = null;
     if (typeof XLSX !== "undefined") {
-      srcWb = decodeFromLS();
+      var srcWb = decodeFromLS();
       if (srcWb) {
-        try {
-          D = buildFromWorkbook(srcWb, "ملف مرفوع (محفوظ)");
-          DATA_FROM_UPLOAD = true;
-          return;
-        } catch (e) {
-          localStorage.removeItem(LS_XLSX);
+        hasDraft = true;
+        pinnedLocal = localStorage.getItem(LS_MODE) === "local";
+        if (pinnedLocal) {
+          try {
+            D = buildFromWorkbook(srcWb, "ملف مرفوع (محفوظ)");
+            DATA_FROM_UPLOAD = true;
+            return;
+          } catch (e) {
+            pinnedLocal = false;
+            localStorage.removeItem(LS_MODE);
+            localStorage.removeItem(LS_XLSX);
+            hasDraft = false;
+          }
         }
+      } else {
+        hasDraft = false;
+        pinnedLocal = false;
+        try { localStorage.removeItem(LS_MODE); } catch (e) { }
       }
     }
     if (!window.DASHBOARD_DATA) {
@@ -1295,6 +1346,7 @@ slxOffice: "Office",
     document.getElementById("creditCall").title = T("callTip");
     document.getElementById("fabWa").title = T("waTip");
     setThemeUI();
+    updateSourceSwitch();
     buildYearSlicer();
     buildMonthSlicer();
     refresh();
@@ -1404,12 +1456,12 @@ slxOffice: "Office",
         var prev = figuresOf(D);
         D = buildFromWorkbook(srcWb, f.name);
         DATA_FROM_UPLOAD = true;
+        pinnedLocal = true;
+        try { localStorage.setItem(LS_MODE, "local"); } catch (e) { }
         try { localStorage.setItem(LS_XLSX, b64); } catch (e) { toast(T("toastQuota")); }
         document.getElementById("genAt").textContent = fmtSaudi12(D.meta.generated_at);
         document.getElementById("srcName").textContent = D.meta.source;
-        var badge = document.getElementById("srcBadge");
-        badge.style.display = "inline-block";
-        badge.textContent = T("badgeLocal");
+        showLocalSource();
         refresh();
         updateFoot();
         setLoading(btn, false);
@@ -1792,7 +1844,14 @@ slxOffice: "Office",
         publishing = false;
         setLoading(btn, false);
         if (timer) clearTimeout(timer);
-        if (res.ok && j && j.ok) toast(T("publishOk"), "ok");
+        if (res.ok && j && j.ok) {
+          toast(T("publishOk"), "ok");
+          pinnedLocal = false;
+          hasNewPublish = false;
+          try { localStorage.setItem(LS_MODE, "global"); } catch (e) { }
+          showRemoteSource();
+          updateSourceSwitch();
+        }
         else toast((j && j.error) ? T("publishErr") + " — " + j.error : T("publishErr"), "err");
       });
     }).catch(function () {
@@ -1806,20 +1865,14 @@ slxOffice: "Office",
   /* =========================================================
      Global sync: adopt the latest published dataset (api/data)
   ========================================================= */
-  // Reloads window.DASHBOARD_DATA from a remote script and returns true when the
-  // published data is newer than the locally loaded one.
-  function adoptRemote(script) {
+  // Eval the remote data.js script; on success the new dataset lands in
+  // window.DASHBOARD_DATA. Returns the parsed dataset or null.
+  function runRemote(script) {
     try {
-      var before = window.DASHBOARD_DATA;
       new Function(script)();
       var nd = window.DASHBOARD_DATA;
-      if (!nd || !nd.meta || !nd.meta.generated_at) { window.DASHBOARD_DATA = before; return false; }
-      var cur = D && D.meta && D.meta.generated_at;
-      if (cur && cur >= nd.meta.generated_at) return false; // keep the newer local copy
-      D = nd;
-      DATA_FROM_UPLOAD = false;
-      return true;
-    } catch (e) { return false; }
+      return (nd && nd.meta && nd.meta.generated_at) ? nd : null;
+    } catch (e) { return null; }
   }
 
   // Reflects the current dataset's metadata in the header chips.
@@ -1830,25 +1883,114 @@ slxOffice: "Office",
 
   function showRemoteSource() {
     showSourceUI();
-    var badge = document.getElementById("srcBadge");
-    badge.style.display = "inline-block";
-    badge.textContent = T("badgeRemote");
+    setSourceBadge("remote", T("badgeRemote"));
   }
 
-  // Best-effort pull of the published dataset once per page load (https only).
-  // Vercel/static hosts: the api/data route serves the repo's latest data.js.
-  function syncPublished() {
-    if (window.location.protocol !== "https:") return;
+  function showLocalSource() {
+    showSourceUI();
+    setSourceBadge("local", T("badgeLocal"));
+  }
+
+  function updateSourceSwitch() {
+    var s = document.getElementById("srcSwitch");
+    if (!s) return;
+    if (!hasDraft && !pinnedLocal) { s.hidden = true; return; }
+    s.hidden = false;
+    s.textContent = pinnedLocal ? T("srcShowGlobal") : T("srcShowLocal");
+    s.classList.toggle("newp", !!hasNewPublish);
+  }
+
+  // Toggles between the locally-pinned uploaded draft and the published dataset.
+  function switchSource() {
+    if (pinnedLocal) {
+      pinnedLocal = false;
+      hasNewPublish = false;
+      try { localStorage.setItem(LS_MODE, "global"); } catch (e) { }
+      D = window.DASHBOARD_DATA || D;
+      DATA_FROM_UPLOAD = false;
+      showRemoteSource();
+      updateSourceSwitch();
+      refresh();
+      updateFoot();
+    } else {
+      if (!hasDraft) { updateSourceSwitch(); return; }
+      var b64 = localStorage.getItem(LS_XLSX);
+      if (!b64) { updateSourceSwitch(); return; }
+      try {
+        var w = XLSX.read(b64, { type: "base64", cellDates: true });
+        D = buildFromWorkbook(w, "ملف مرفوع (محفوظ)");
+        DATA_FROM_UPLOAD = true;
+        pinnedLocal = true;
+        hasNewPublish = false;
+        try { localStorage.setItem(LS_MODE, "local"); } catch (e) { }
+        showLocalSource();
+        updateSourceSwitch();
+        refresh();
+        updateFoot();
+      } catch (e) {
+        toast(T("toastErrDetail") + " " + (e && e.message ? e.message : String(e)), "err");
+      }
+    }
+  }
+
+  // Shared, pinned-aware handling of an incoming published dataset.
+  function adoptLive(nd) {
+    if (!nd || !nd.meta || !nd.meta.generated_at) return;
+    if (pinnedLocal) {
+      if (sigOf(nd) !== sigOf(D) && !hasNewPublish) {
+        hasNewPublish = true;
+        updateSourceSwitch();
+        toast(T("srcNewPublished"), "ok");
+      }
+      return;
+    }
+    if (sigOf(nd) !== sigOf(D) || nd.meta.generated_at > D.meta.generated_at) {
+      D = nd;
+      DATA_FROM_UPLOAD = false;
+      showRemoteSource();
+      refresh();
+      updateFoot();
+      toast(T("toastSynced"), "ok");
+    } else {
+      showSourceUI();
+    }
+    updateSourceSwitch();
+  }
+
+  // Last-resort: inject the live data.js as a <script> — works even where
+  // fetch/CORS is blocked (subpath hosting, aggressive proxies).
+  function liveScriptFallback() {
+    if (window.__liveQueued) return;
+    window.__liveQueued = true;
+    var s = document.createElement("script");
+    s.src = liveDataURL();
+    s.onload = function () { adoptLive(window.DASHBOARD_DATA || null); };
+    document.head.appendChild(s);
+  }
+
+  function fetchDataBridge() {
     fetch("api/data?ts=" + Date.now(), { cache: "no-store" })
       .then(function (r) { return r.ok ? r.text() : null; })
       .then(function (txt) {
-        if (!txt || !adoptRemote(txt)) return;
-        showRemoteSource();
-        refresh();
-        updateFoot();
-        toast(T("toastSynced"), "ok");
+        if (txt) { adoptLive(runRemote(txt)); return; }
+        liveScriptFallback();
       })
-      .catch(function () { /* offline server is fine — fall back to bundled data */ });
+      .catch(function () { liveScriptFallback(); });
+  }
+
+  // Best-effort pull of the published dataset once per page load (https only).
+  // Chain: raw GitHub CDN -> serverless api/data bridge -> <script> injection, so
+  // the LIVE published data wins over the bundled copy on ANY host (Vercel,
+  // GitHub Pages, plain static). Publishing stays on api/update (server-side).
+  function syncPublished() {
+    if (window.location.protocol !== "https:") return;
+    fetch(liveDataURL(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (txt) {
+        if (txt) { adoptLive(runRemote(txt)); return; }
+        fetchDataBridge();
+      })
+      .catch(function () { fetchDataBridge(); });
   }
 
   function applyStagger() {
@@ -1874,6 +2016,8 @@ slxOffice: "Office",
     document.getElementById("dlBtn").addEventListener("click", downloadData);
     document.getElementById("publishBtn").addEventListener("click", publishData);
     document.getElementById("fileXlsx").addEventListener("change", handleFile);
+    var srcSwitchEl = document.getElementById("srcSwitch");
+    if (srcSwitchEl) srcSwitchEl.addEventListener("click", switchSource);
   }
 
   /* =========================================================
@@ -1887,10 +2031,8 @@ slxOffice: "Office",
 
   document.getElementById("genAt").textContent = fmtSaudi12(D.meta.generated_at);
   document.getElementById("srcName").textContent = D.meta.source;
-  if (DATA_FROM_UPLOAD) {
-    document.getElementById("srcBadge").style.display = "inline-block";
-    document.getElementById("srcBadge").textContent = T("badgeLocal");
-  }
+  if (pinnedLocal) showLocalSource(); else setSourceBadge("none");
+  updateSourceSwitch();
 
   updateFoot();
   buildYearSlicer();
@@ -1907,6 +2049,9 @@ slxOffice: "Office",
   updateFoot();
   applyStagger();
   syncPublished();
+  // Keep the board live: re-poll the published data every 45s so a publish
+  // made by anyone else lands on screen without a manual refresh.
+  setTimeout(function () { syncPublished(); }, 45000);
 
   window.addEventListener("resize", function () {
     Object.keys(charts).forEach(function (k) { if (charts[k]) charts[k].resize(); });
