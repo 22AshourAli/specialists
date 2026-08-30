@@ -80,7 +80,7 @@
       toastDiff: "تم تحديث الأرقام ✓ {0}",
       toastSame: "تمت قراءة الملف بنجاح، والأرقام متطابقة تماماً مع ما في اللوحة — لا يوجد تغيير في القيم أو عدد الصفوف",
       toastDup: "تم تجاهل {0} صف مكرر مطابق حرفياً لصف محسوب مسبقاً (حتى لا يُحتسب الإجمالي مرتين) — مثال:{1}",
-      toastSaved: "تم تصدير نسخة احتياطية Excel احترافية (ملخص + بيانات كاملة) — يفتح في أي برنامج جداول",
+      toastSaved: "تم تصدير نسخة احتياطية Excel كاملة (8 أوراق، عربي من اليمين لليسار) — مصفوفات، تفاصيل، ومجاميع",
       toastNew: "البيانات مأخوذة من ملف مرفوع محفوظ محلياً",
       toastSynced: "تم مزامنة أحدث البيانات المنشورة من الخادم ✓",
       badgeLocal: "مرفوع",
@@ -174,7 +174,7 @@ slxOffice: "Office",
       toastDiff: "Numbers updated ✓ {0}",
       toastSame: "File read successfully; numbers match the dashboard exactly — no change in values or row count",
       toastDup: "Ignored {0} duplicate row(s) matching a row already counted (to avoid double counting) — e.g.:{1}",
-      toastSaved: "Exported a professional Excel backup (summary + full data) — opens in any spreadsheet app",
+      toastSaved: "Exported a complete Excel backup (8 sheets, Arabic RTL) — matrices, details and totals",
       toastNew: "Data loaded from a locally saved uploaded file",
       toastSynced: "Synced the latest published data from the server ✓",
       badgeLocal: "uploaded",
@@ -1428,96 +1428,336 @@ slxOffice: "Office",
   }
 
   /* =========================================================
-     Excel backup export — a structured, styled workbook
+     Excel backup export — a complete RTL workbook (8 sheets).
+     Sheet direction is right-to-left (Arabic-first), headers
+     are navy-on-white, titles are merged, bodies get zebra
+     strips and real Excel number formats.
   ========================================================= */
   function r4(x) { return Math.round((x || 0) * 10000) / 10000; }
 
-  function aoaSheet(rows, widths) {
-    var ws = XLSX.utils.aoa_to_sheet(rows);
-    if (widths) ws["!cols"] = widths.map(function (w) { return { wch: w }; });
-    return ws;
-  }
+  var EXCEL_AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+  var EXCEL_YEARS = [2023, 2024, 2025, 2026];
 
-  // Bolds the first row and gives it a navy fill (readable header).
-  function styleFirstRow(ws) {
+  // Post-processes a worksheet: merged titles, styled header/section/total
+  // rows, zebra body and per-column number formats.
+  function decorate(ws, o) {
     if (!ws || !ws["!ref"]) return ws;
     var rng = XLSX.utils.decode_range(ws["!ref"]);
-    for (var c = rng.s.c; c <= rng.e.c; c++) {
-      var addr = XLSX.utils.encode_cell({ r: 0, c: c });
-      if (ws[addr]) ws[addr].s = {
-        font: { bold: true, color: { rgb: "FFFFFF" } },
-        fill: { patternType: "solid", fgColor: { rgb: "1F3A5F" } },
-        alignment: { vertical: "center", horizontal: "center" },
-        border: { bottom: { style: "thin", color: { rgb: "0F2440" } } },
-      };
+    var head = {}, title = {}, section = {}, total = {}, pct = {};
+    (o.headRows || []).forEach(function (r) { head[r] = 1; });
+    (o.titleRows || []).forEach(function (r) { title[r] = 1; });
+    (o.sectionRows || []).forEach(function (r) { section[r] = 1; });
+    (o.totalRows || []).forEach(function (r) { total[r] = 1; });
+    (o.pct || []).forEach(function (r) { pct[r] = 1; });
+    var money = {}, ints = {};
+    (o.money || []).forEach(function (c) { money[c] = 1; });
+    (o.ints || []).forEach(function (c) { ints[c] = 1; });
+    var mr = o.moneyRows || null;
+    var bodyStart = o.headRows && o.headRows.length ? o.headRows[0] + 1 : 1;
+    for (var r = rng.s.r; r <= rng.e.r; r++) {
+      var isBody = !title[r] && !head[r] && !section[r] && !total[r] && r >= bodyStart;
+      var zebra = o.zebra && isBody && !(r % 2);
+      for (var c = rng.s.c; c <= rng.e.c; c++) {
+        var cell = ws[XLSX.utils.encode_cell({ r: r, c: c })];
+        if (!cell) continue;
+        var s = cell.s = cell.s || {};
+        s.alignment = { vertical: "center", horizontal: "right", wrapText: !!(o.wrap && o.wrap.indexOf(c) > -1) };
+        if (title[r]) {
+          s.font = { bold: true, sz: 15, color: { rgb: "FFFFFF" } };
+          s.fill = { patternType: "solid", fgColor: { rgb: "12263F" } };
+        } else if (head[r]) {
+          s.font = { bold: true, color: { rgb: "FFFFFF" } };
+          s.fill = { patternType: "solid", fgColor: { rgb: "1F3A5F" } };
+        } else if (section[r]) {
+          s.font = { bold: true, color: { rgb: "0B2447" } };
+          s.fill = { patternType: "solid", fgColor: { rgb: "BBDEFB" } };
+        } else if (total[r]) {
+          s.font = { bold: true, color: { rgb: "1F3A5F" } };
+          s.fill = { patternType: "solid", fgColor: { rgb: "DCE6F1" } };
+        } else if (zebra) {
+          s.fill = { patternType: "solid", fgColor: { rgb: "F2F6FB" } };
+        }
+        if (isBody || total[r]) {
+          if (pct[r]) cell.z = "0.00%";
+          else if (mr ? mr.indexOf(r) > -1 : money[c]) cell.z = "#,##0.00";
+          else if (ints[c]) cell.z = "#,##0";
+        }
+      }
     }
     return ws;
   }
 
-  // Headline figures used by the summary sheet (agnostic to the current filters).
-  function kpiSummary() {
-    var t = punchTotals("agg", allOffices(), 1, 12);
-    return [
-      [T("cardEsn"), t.esnad],
-      [T("cardEnt"), t.entajia],
-      [T("cardFou"), t.foutra],
-      [T("cardInv"), D.invoices.foutra_shamel],
-      [T("cardPaid"), D.invoices.paid_total],
-      [T("cardUnb"), D.unbilled.total],
-      [T("cardSap"), D.sap.totals.shamel],
-      [T("footInvN"), D.meta.counts.invoices],
-      [T("footUnbN"), D.meta.counts.unbilled],
-      [T("chpUpdated"), String(D.meta.generated_at)],
-      [T("chpSource"), String(D.meta.source)],
-    ];
+  function emitSheet(wb, name, rows, cfg) {
+    var ws = XLSX.utils.aoa_to_sheet(rows);
+    if (cfg.cols) ws["!cols"] = cfg.cols.map(function (w) { return { wch: w }; });
+    if (cfg.merges) ws["!merges"] = cfg.merges;
+    XLSX.utils.book_append_sheet(wb, decorate(ws, cfg), name);
+  }
+
+  function moneyOf(v) { return typeof v === "number" && isFinite(v) ? r4(v) : 0; }
+
+  function officeMetricSum(year, off, metric) {
+    var pc = D.punchcard[String(year)] || {};
+    var o = pc[off] || {};
+    return (o._total && o._total[metric]) ? r4(o._total[metric]) : 0;
   }
 
   function downloadData() {
     if (!D || typeof XLSX === "undefined") return;
     var wb = XLSX.utils.book_new();
-    var lbl = lang === "ar" ? ["البيان", "القيمة"] : ["Item", "Value"];
+    var offices = allOffices();
 
-    // Summary: headline figures + metadata.
-    var sum = [lbl].concat(kpiSummary());
-    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(sum, [40, 24])), "الملخص");
+    /* ---------- 1) الملخص: headline KPIs + metadata ---------- */
+    {
+      var t = punchTotals("agg", offices, 1, 12);
+      var invSh = D.invoices.foutra_shamel || 0;
+      var paidTot = D.invoices.paid_total || 0;
+      var sumRows = [
+        ["ملخص أعمال المختصون"],
+        ["المصدر: " + D.meta.source + "  |  أُنشئ: " + fmtSaudi12(D.meta.generated_at)],
+        ["البيان", "القيمة"],
+        ["الإسناد (كل السنوات)", r4(t.esnad)],
+        ["الإنتاجية", r4(t.entajia)],
+        ["الفوترة", r4(t.foutra)],
+        ["الفواتير الشاملة", invSh],
+        ["المدفوع (مصروف)", paidTot],
+        ["نسبة التحصيل", invSh ? paidTot / invSh : 0],
+        ["غير المفوتر (مشاريع)", D.unbilled.total],
+        ["SAP — شامل", D.sap.totals.shamel],
+        ["SAP — مفوتر", D.sap.totals["مفوتر"]],
+        ["SAP — ضريبة", D.sap.totals["ضريبه"]],
+        ["عدد الفواتير", D.meta.counts.invoices],
+        ["عدد المشاريع غير المفوترة", D.meta.counts.unbilled],
+        ["عدد المكاتب", offices.length],
+        ["سنوات البيانات", String(D.meta.years.filter(function (y) { return typeof y === "number"; }).join("، "))],
+      ];
+      emitSheet(wb, "الملخص", sumRows, {
+        cols: [46, 24],
+        merges: [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }],
+        titleRows: [0], headRows: [2],
+        moneyRows: [3, 4, 5, 6, 7, 9, 10, 11], pct: [8],
+        wrap: [0],
+      });
+    }
 
-    // Invoices detail.
-    var invRows = [["عقد", "قسم", "شهر", "سنه", "قيمة", "ضريبة", "شامل", "غرامات", "سلامه", "صافي", "مصروف", "مكتب"]];
-    D.invoices.detail.forEach(function (r) {
-      invRows.push([r["عقد"], r["قسم"], r["شهر"], r["سنه"], r["قيمة"], r["ضريبة"], r["shamel"], r["غرامات"], r["سلامه"], r["safy"], r["paid"], r["مكتب"]]);
-    });
-    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(invRows, [12, 10, 6, 6, 13, 13, 13, 13, 13, 13, 13, 12])), "الفواتير");
-
-    // Monthly matrix for the currently selected year.
-    var pc = D.punchcard[String(S.year)] || {};
-    var mths = [];
-    allOffices().forEach(function (off) {
-      var o = pc[off] || {};
-      for (var m = 1; m <= 12; m++) {
-        if (o[m] && (o[m][0] || o[m][1] || o[m][2])) mths.push([off, m, r4(o[m][0]), r4(o[m][1]), r4(o[m][2])]);
+    /* ---------- 2) سنوي: office × year, one block per metric ---------- */
+    {
+      var mat = [];
+      var yrs = EXCEL_YEARS.slice();
+      var titleIdx = [], headIdx = [], totIdx = [];
+      var names = ["الإسناد حسب المكتب والسنة", "الإنتاجية حسب المكتب والسنة", "الفوترة حسب المكتب والسنة"];
+      for (var mi = 0; mi < 3; mi++) {
+        titleIdx.push(mat.length);
+        mat.push([names[mi], "", "", "", "", ""]);
+        headIdx.push(mat.length);
+        mat.push(["المكتب"].concat(yrs.map(String), ["الإجمالي"]));
+        var dataStart = mat.length;
+        var grandPerOff = 0;
+        offices.forEach(function (off) {
+          var row = [off];
+          var g = 0;
+          yrs.forEach(function (y) {
+            var v = officeMetricSum(y, off, mi);
+            row.push(v);
+            g += v;
+          });
+          row.push(g);
+          mat.push(row);
+          grandPerOff += g;
+        });
+        var sums = new Array(yrs.length).fill(0);
+        var gAgg = 0;
+        offices.forEach(function (off) { gAgg += moneyOf(officeMetricSum("agg", off, mi)); });
+        for (var rr = dataStart; rr < mat.length; rr++) {
+          var rw = mat[rr];
+          for (var c = 1; c <= yrs.length; c++) sums[c - 1] += moneyOf(rw[c]);
+        }
+        totIdx.push(mat.length);
+        mat.push(["الإجمالي"].concat(sums, [gAgg]));
       }
-    });
-    mths.unshift(["مكتب", "رقم الشهر", "إسناد", "إنتاجية", "فوترة"]);
-    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(mths, [16, 10, 14, 14, 14])), "الشهري");
+      var mergeT = titleIdx.map(function (r) { return { s: { r: r, c: 0 }, e: { r: r, c: 5 } }; });
+      emitSheet(wb, "سنوي (مكاتب)", mat, {
+        cols: [18, 15, 15, 15, 15, 15],
+        merges: mergeT,
+        titleRows: titleIdx, headRows: headIdx, totalRows: totIdx,
+        money: [1, 2, 3, 4, 5], zebra: true,
+      });
+    }
 
-    // SAP detail.
-    var sapRows = [["مكتب", "عقد", "نوع", "موقف", "شهر", "سنه", "اسناد", "مفوتر", "ضريبه", "شامل"]];
-    D.sap.detail.forEach(function (r) { sapRows.push([r["مكتب"], r["عقد"], r["انوع"], r["موقف"], r["شهر"], r["سنه"], r["اسناد"], r["مفوتر"], r["ضريبه"], r["shamel"]]); });
-    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(sapRows, [14, 10, 12, 14, 6, 6, 14, 12, 12, 14])), "SAP");
+    /* ---------- 3) الشهري: year/month rows, offices as columns ---------- */
+    {
+      var mtx = [];
+      var ncol = 2 + offices.length + 1; // سنة | شهر | offices.. | الإجمالي
+      var tI = [], hI = [], toI = [];
+      var metricNames = ["الإسناد الشهري حسب المكتب", "الإنتاجية الشهرية حسب المكتب", "الفوترة الشهرية حسب المكتب"];
+      for (var k = 0; k < 3; k++) {
+        tI.push(mtx.length);
+        mtx.push([metricNames[k]].concat(new Array(ncol - 1).fill("")));
+        hI.push(mtx.length);
+        mtx.push(["السنة", "الشهر"].concat(offices, ["الإجمالي"]));
+        var colTot = offices.map(function () { return 0; });
+        var allTot = 0;
+        EXCEL_YEARS.forEach(function (y) {
+          for (var m = 1; m <= 12; m++) {
+            var row = [y, EXCEL_AR_MONTHS[m - 1]];
+            var cnt = 0;
+            offices.forEach(function (off) {
+              var pc = D.punchcard[String(y)] || {};
+              var o = pc[off] || {};
+              var v = o[m] ? r4(o[m][k]) : 0;
+              row.push(v);
+              colTot[cnt] += v;
+              cnt++;
+            });
+            var totR = colTot.reduce(function (a, b) { return a + b; }, 0);
+            allTot += totR;
+            row.push(totR);
+            mtx.push(row);
+          }
+        });
+        toI.push(mtx.length);
+        mtx.push(["الإجمالي", ""].concat(colTot, [allTot]));
+      }
+      var mergesM = tI.map(function (r) { return { s: { r: r, c: 0 }, e: { r: r, c: ncol - 1 } }; });
+      var moneyCols = [];
+      for (var mc = 2; mc < ncol; mc++) moneyCols.push(mc);
+      emitSheet(wb, "الشهري", mtx, {
+        cols: [9, 10].concat(offices.map(function () { return 13; }), [14]),
+        merges: mergesM,
+        titleRows: tI, headRows: hI, totalRows: toI,
+        money: moneyCols,
+        zebra: true,
+      });
+    }
 
-    // UDS detail.
-    var udsRows = [["مكتب", "شهر", "سنه", "اسناد", "مفوتر", "شامل", "صرف", "متبقي", "موقف", "افادة_فوتره", "افادة_تنفيذ"]];
-    D.uds.detail.forEach(function (r) {
-      udsRows.push([r["مكتب"], r["شهر"], r["سنه"], r["اسناد"], r["مفوتر"], r["shamel"], r["صرف"], r["متبقي"], r["موقف"], r["افادة_فوتره"], r["افادة_تنفيذ"]]);
-    });
-    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(udsRows, [14, 6, 6, 14, 12, 14, 12, 12, 10, 16, 16])), "UDS");
+    /* ---------- 4) الفواتير: full detail + grand totals ---------- */
+    {
+      var invRows = [
+        ["الفواتير — تفاصيل كاملة"],
+        ["عقد", "قسم", "شهر", "سنة", "قيمة", "ضريبة", "شامل", "غرامات", "سلامة", "صافي", "مصروف", "مكتب"],
+      ];
+      var invSum = [0, 0, 0, 0, 0, 0, 0];
+      D.invoices.detail.forEach(function (r) {
+        invRows.push([r["عقد"], r["قسم"], r["شهر"], r["سنه"], r["قيمة"], r["ضريبة"], r["shamel"], r["غرامات"], r["سلامه"], r["safy"], r["paid"], r["مكتب"]]);
+        invSum[0] += moneyOf(r["قيمة"]); invSum[1] += moneyOf(r["ضريبة"]); invSum[2] += moneyOf(r["shamel"]);
+        invSum[3] += moneyOf(r["غرامات"]); invSum[4] += moneyOf(r["سلامه"]); invSum[5] += moneyOf(r["safy"]); invSum[6] += moneyOf(r["paid"]);
+      });
+      invRows.push(["الإجمالي", "", "", "", invSum[0], invSum[1], invSum[2], invSum[3], invSum[4], invSum[5], invSum[6], ""]);
+      emitSheet(wb, "الفواتير", invRows, {
+        cols: [10, 9, 7, 7, 14, 14, 14, 13, 13, 14, 14, 12],
+        merges: [{ s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }],
+        titleRows: [0], headRows: [1],
+        totalRows: [invRows.length - 1],
+        money: [4, 5, 6, 7, 8, 9, 10], zebra: true,
+      });
+    }
 
-    // Unbilled projects.
-    var unbRows = [["المشروع", "مبدئيه", "نهائيه", "رصيد_مفوتر"]];
-    D.unbilled.projects.forEach(function (p) { unbRows.push([p["name"], p["مبدئيه"], p["نهائيه"], p["رصيد_مفوتر"]]); });
-    XLSX.utils.book_append_sheet(wb, styleFirstRow(aoaSheet(unbRows, [44, 14, 14, 14])), "UNBILLED");
+    /* ---------- 5) SAP: grouped by office with section totals ---------- */
+    {
+      var sap = [["SAP — أعمال الطوارئ والصيانة"]];
+      var sapT = [], sapH = [], sapS = [], sapG = [];
+      var offGroups = {};
+      D.sap.detail.forEach(function (r) { (offGroups[r["مكتب"]] = offGroups[r["مكتب"]] || []).push(r); });
+      var grand = { اسناد: 0, مفوتر: 0, ضريبه: 0, شامل: 0, صافي: 0 };
+      Object.keys(offGroups).forEach(function (off) {
+        sapS.push(sap.length);
+        sap.push(["مكتب: " + off, "", "", "", "", "", "", "", "", ""]);
+        sapH.push(sap.length);
+        sap.push(["العقد", "النوع", "الموقف", "الشهر", "السنة", "الإسناد", "المفوتر", "الضريبة", "الشامل", "الصافي"]);
+        var g = { اسناد: 0, مفوتر: 0, ضريبه: 0, شامل: 0, صافي: 0 };
+        offGroups[off].forEach(function (r) {
+          sap.push([r["عقد"], r["انوع"], r["موقف"], r["شهر"], r["سنه"], r4(r["اسناد"]), r4(r["مفوتر"]), r4(r["ضريبه"]), r4(r["shamel"]), r4(r["صافي"])]);
+          g["اسناد"] += moneyOf(r["اسناد"]); g["مفوتر"] += moneyOf(r["مفوتر"]); g["ضريبه"] += moneyOf(r["ضريبه"]); g["شامل"] += moneyOf(r["shamel"]); g["صافي"] += moneyOf(r["صافي"]);
+        });
+        sapT.push(sap.length);
+        sap.push(["إجمالي " + off, "", "", "", "", g["اسناد"], g["مفوتر"], g["ضريبه"], g["شامل"], g["صافي"]]);
+        grand["اسناد"] += g["اسناد"]; grand["مفوتر"] += g["مفوتر"]; grand["ضريبه"] += g["ضريبه"]; grand["شامل"] += g["شامل"]; grand["صافي"] += g["صافي"];
+      });
+      sapG.push(sap.length);
+      sap.push(["الإجمالي الكلي", "", "", "", "", grand["اسناد"], grand["مفوتر"], grand["ضريبه"], grand["شامل"], grand["صافي"]]);
+      emitSheet(wb, "SAP", sap, {
+        cols: [9, 22, 12, 7, 7, 14, 14, 14, 14, 14],
+        merges: [{ s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }],
+        titleRows: [0], headRows: sapH, sectionRows: sapS, totalRows: sapT.concat(sapG),
+        money: [5, 6, 7, 8, 9], zebra: true,
+      });
+    }
 
-    var out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    /* ---------- 6) UDS: grouped by office with section totals ---------- */
+    {
+      var uds = [["UDS — أعمال الخدمات والاستشارات"]];
+      var udsH = [], udsS = [], udsT = [], udsG = [];
+      var uGrp = {};
+      D.uds.detail.forEach(function (r) { (uGrp[r["مكتب"]] = uGrp[r["مكتب"]] || []).push(r); });
+      var grandU = [0, 0, 0, 0, 0];
+      Object.keys(uGrp).forEach(function (off) {
+        udsS.push(uds.length);
+        uds.push(["مكتب: " + off, "", "", "", "", "", "", "", "", ""]);
+        udsH.push(uds.length);
+        uds.push(["الشهر", "السنة", "الإسناد", "المفوتر", "الشامل", "الصرف", "المتبقي", "الموقف", "إفادة الفوترة", "إفادة التنفيذ"]);
+        var gg = [0, 0, 0, 0, 0];
+        uGrp[off].forEach(function (r) {
+          uds.push([r["شهر"], r["سنه"], r4(r["اسناد"]), r4(r["مفوتر"]), r4(r["shamel"]), r4(r["صرف"]), r4(r["متبقي"]), r["موقف"], r["افادة_فوتره"], r["افادة_تنفيذ"]]);
+          gg[0] += moneyOf(r["اسناد"]); gg[1] += moneyOf(r["مفوتر"]); gg[2] += moneyOf(r["shamel"]); gg[3] += moneyOf(r["صرف"]); gg[4] += moneyOf(r["متبقي"]);
+        });
+        udsT.push(uds.length);
+        uds.push(["إجمالي " + off, "", gg[0], gg[1], gg[2], gg[3], gg[4], "", "", ""]);
+        grandU[0] += gg[0]; grandU[1] += gg[1]; grandU[2] += gg[2]; grandU[3] += gg[3]; grandU[4] += gg[4];
+      });
+      udsG.push(uds.length);
+      uds.push(["الإجمالي الكلي", "", grandU[0], grandU[1], grandU[2], grandU[3], grandU[4], "", "", ""]);
+      emitSheet(wb, "UDS", uds, {
+        cols: [8, 8, 14, 14, 14, 14, 14, 14, 16, 16],
+        merges: [{ s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }],
+        titleRows: [0], headRows: udsH, sectionRows: udsS, totalRows: udsT.concat(udsG),
+        money: [2, 3, 4, 5, 6], zebra: true,
+      });
+    }
+
+    /* ---------- 7) غير المفوتر: unbilled projects ---------- */
+    {
+      var unb = [["مشاريع غير المفوترة"], ["المشروع", "مبدئية", "نهائية", "رصيد المفوتر"]];
+      var uT = { 1: 0, 2: 0, 3: 0 };
+      D.unbilled.projects.forEach(function (p) {
+        unb.push([p["name"], r4(p["مبدئيه"]), r4(p["نهائيه"]), r4(p["رصيد_مفوتر"])]);
+        uT[1] += moneyOf(p["مبدئيه"]); uT[2] += moneyOf(p["نهائيه"]); uT[3] += moneyOf(p["رصيد_مفوتر"]);
+      });
+      unb.push(["الإجمالي", uT[1], uT[2], uT[3]]);
+      emitSheet(wb, "غير المفوتر", unb, {
+        cols: [56, 15, 15, 15],
+        merges: [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }],
+        titleRows: [0], headRows: [1],
+        totalRows: [unb.length - 1],
+        money: [1, 2, 3], zebra: true,
+      });
+    }
+
+    /* ---------- 8) UDS/SAP تقسيم: type split per year ---------- */
+    {
+      var tw = [["تقسيم الإسناد حسب النوع داخل السنة"], ["السنة", "UDS", "SAP", "الإجمالي"]];
+      var wT = { 1: 0, 2: 0 };
+      EXCEL_YEARS.slice().reverse().forEach(function (y) {
+        var ud = moneyOf(D.type_split[String(y)].UDS);
+        var sp = moneyOf(D.type_split[String(y)].SAP);
+        tw.push([y, ud, sp, ud + sp]);
+        wT[1] += ud; wT[2] += sp;
+      });
+      tw.push(["الإجمالي", wT[1], wT[2], wT[1] + wT[2]]);
+      emitSheet(wb, "تقسيم UDS وSAP", tw, {
+        cols: [12, 16, 16, 16],
+        merges: [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }],
+        titleRows: [0], headRows: [1],
+        totalRows: [tw.length - 1],
+        money: [1, 2, 3], zebra: true,
+      });
+    }
+
+    var out = (function () {
+      // RTL flag lives on the workbook's Views (read back by the SheetJS writer).
+      wb.Workbook = wb.Workbook || {};
+      wb.Workbook.Views = [{ RTL: true }];
+      return XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    })();
     var blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -1540,20 +1780,25 @@ slxOffice: "Office",
     var btn = document.getElementById("publishBtn");
     setLoading(btn, true);
     toast(T("publishBusy"), "");
+    var ac = ("AbortController" in window) ? new AbortController() : null;
+    var timer = ac ? setTimeout(function () { ac.abort(); }, 20000) : null;
     fetch("api/update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pin: PUBLISH_PIN, data: JSON.stringify(D) }),
+      signal: ac ? ac.signal : undefined,
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (j) {
         publishing = false;
         setLoading(btn, false);
+        if (timer) clearTimeout(timer);
         if (res.ok && j && j.ok) toast(T("publishOk"), "ok");
-        else toast(T("publishErr"), "err");
+        else toast((j && j.error) ? T("publishErr") + " — " + j.error : T("publishErr"), "err");
       });
     }).catch(function () {
       publishing = false;
       setLoading(btn, false);
+      if (timer) clearTimeout(timer);
       toast(T("publishErr"), "err");
     });
   }
