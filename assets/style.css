@@ -215,6 +215,7 @@ a.fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   border-radius: var(--r);
   padding: 14px 16px;
   margin-bottom: 16px;
+  margin-top: 16px;
   backdrop-filter: blur(6px);
   box-shadow: var(--shadow);
   animation: fadeUp .5s ease both;
